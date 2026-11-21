@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MPU6050 Live</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-0: #f4f3f0;
+  --surface-1: #fcfcfb;
+  --surface-2: #f0efec;
+  --border: #e2e1dc;
+  --grid: #e8e7e3;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #7a7974;
+  --accent: #2a78d6;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --good: #0ca30c;
+  --good-text: #006300;
+  --critical: #d03b3b;
+  --warning: #fab219;
+  --pcb: #1f5fa8;
+  --pcb-edge: #164a85;
+  --chip: #1b1b1b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --surface-0: #121211;
+    --surface-1: #1a1a19;
+    --surface-2: #242422;
+    --border: #33332f;
+    --grid: #2b2b28;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8f8e86;
+    --accent: #3987e5;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --good-text: #4cc94c;
+    --pcb: #1d5596;
+    --pcb-edge: #123e70;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-0: #121211;
+  --surface-1: #1a1a19;
+  --surface-2: #242422;
+  --border: #33332f;
+  --grid: #2b2b28;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #8f8e86;
+  --accent: #3987e5;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --good-text: #4cc94c;
+  --pcb: #1d5596;
+  --pcb-edge: #123e70;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--surface-0);
+  color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+}
+.num, td.num, .mono { font-variant-numeric: tabular-nums; }
+.mono { font-family: ui-monospace, "SFMono-Regular", "DejaVu Sans Mono", Menlo, monospace; font-size: 13px; }
+main { max-width: 1280px; margin: 0 auto; padding: 16px; }
+
+header.top {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+header.top h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+header.top .sub { color: var(--text-secondary); font-size: 13px; }
+.top-right { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-1); font-size: 13px; color: var(--text-primary);
+}
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.pill.ok .dot { background: var(--good); }
+.pill.bad .dot { background: var(--critical); }
+.pill.warn .dot { background: var(--warning); }
+
+button, select {
+  font: inherit; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer;
+}
+button:hover, select:hover { border-color: var(--text-muted); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+button[aria-pressed="true"] { background: var(--surface-2); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: default; }
+
+.banner {
+  display: none; padding: 12px 14px; border-radius: 10px; margin-bottom: 16px;
+  border: 1px solid var(--critical); background: var(--surface-1);
+}
+.banner.show { display: block; }
+.banner b { color: var(--critical); }
+.banner ul { margin: 6px 0 0 18px; padding: 0; color: var(--text-secondary); }
+
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+.tile .label { color: var(--text-secondary); font-size: 12px; }
+.tile .value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; margin-top: 2px; }
+.tile .value small { font-size: 14px; font-weight: 500; color: var(--text-secondary); margin-left: 2px; }
+.tile .foot { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+
+.grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 16px; }
+.stack { display: grid; gap: 16px; align-content: start; }
+.card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-width: 0; }
+.card h2 { font-size: 15px; margin: 0 0 2px; }
+.card .hint { color: var(--text-secondary); font-size: 12.5px; margin: 0 0 10px; }
+
+/* 3D board */
+.scene {
+  height: 260px; display: flex; align-items: center; justify-content: center;
+  perspective: 900px; overflow: hidden; border-radius: 10px; background: var(--surface-2);
+}
+.camera { transform-style: preserve-3d; transform: rotateX(50deg); }
+.board { position: relative; width: 210px; height: 130px; transform-style: preserve-3d; }
+.face { position: absolute; }
+.face.top {
+  inset: 0; transform: translateZ(5px); background: var(--pcb); border-radius: 6px;
+  box-shadow: inset 0 0 0 2px var(--pcb-edge);
+}
+.face.bottom { inset: 0; transform: rotateY(180deg) translateZ(5px); background: var(--pcb-edge); border-radius: 6px; }
+.face.side-x { width: 10px; height: 130px; top: 0; background: var(--pcb-edge); }
+.face.side-x.r { right: -5px; transform: rotateY(90deg); }
+.face.side-x.l { left: -5px; transform: rotateY(-90deg); }
+.face.side-y { width: 210px; height: 10px; left: 0; background: var(--pcb-edge); }
+.face.side-y.t { top: -5px; transform: rotateX(90deg); }
+.face.side-y.b { bottom: -5px; transform: rotateX(-90deg); }
+.chip {
+  position: absolute; left: 88px; top: 46px; width: 34px; height: 34px; background: var(--chip);
+  border-radius: 3px; color: #bbb; font: 600 6px/1 system-ui; display: flex; align-items: center; justify-content: center;
+}
+.pins { position: absolute; left: 14px; right: 14px; bottom: 8px; display: flex; justify-content: space-between; }
+.pins span { color: #e9eef6; font: 600 8px/1 system-ui; text-align: center; }
+.pins span::before { content: ""; display: block; width: 8px; height: 8px; margin: 0 auto 3px; border-radius: 50%; background: #d6b45a; }
+.axis { position: absolute; font: 700 11px/1 system-ui; color: #fff; }
+.axis.x { left: 128px; top: 58px; }
+.axis.x::before { content: ""; position: absolute; right: 14px; top: 4px; width: 36px; height: 3px; background: var(--series-1); }
+.axis.y { left: 101px; top: 6px; }
+.axis.y::before { content: ""; position: absolute; left: 3px; top: 14px; width: 3px; height: 24px; background: var(--series-2); }
+.axis.z { left: 128px; top: 24px; }
+.axis.z::before { content: "⊙"; position: absolute; left: -14px; top: -1px; color: var(--series-3); font-size: 13px; }
+
+.angles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.angle { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.angle .label { color: var(--text-secondary); font-size: 12px; }
+.angle .value { font-size: 20px; font-weight: 600; }
+.angle .foot { font-size: 11.5px; color: var(--text-muted); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+.progress { height: 4px; background: var(--surface-2); border-radius: 4px; overflow: hidden; margin-top: 8px; display: none; }
+.progress.show { display: block; }
+.progress div { height: 100%; width: 0; background: var(--accent); }
+.note { font-size: 12.5px; color: var(--text-secondary); margin-top: 6px; }
+
+/* charts */
+.chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--text-secondary); }
+.legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.legend .sw { width: 12px; height: 3px; border-radius: 2px; }
+.legend .val { color: var(--text-primary); font-variant-numeric: tabular-nums; min-width: 58px; display: inline-block; }
+.chart-wrap { position: relative; margin-top: 6px; }
+canvas.chart { width: 100%; height: 170px; display: block; touch-action: none; }
+.tooltip {
+  position: absolute; pointer-events: none; display: none; background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px;
+  box-shadow: 0 4px 14px rgba(0,0,0,.12); white-space: nowrap; z-index: 2;
+}
+.tooltip .tt-row { display: flex; align-items: center; gap: 6px; }
+.tooltip .sw { width: 10px; height: 3px; border-radius: 2px; }
+
+/* settings */
+.settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; }
+.settings label, .settings .field { display: grid; gap: 4px; font-size: 12.5px; color: var(--text-secondary); }
+.settings select { width: 100%; }
+.seg { display: inline-flex; justify-self: start; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; }
+.seg button + button { border-left: 1px solid var(--border); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-flag { padding: 3px 8px; border-radius: 6px; font-size: 12px; border: 1px solid var(--border); color: var(--text-muted); }
+.chip-flag.on { color: var(--text-primary); border-color: var(--accent); background: var(--surface-2); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; margin-top: 10px; }
+.kv dt { color: var(--text-secondary); }
+.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
+.motion-flash { transition: background .3s; border-radius: 6px; padding: 0 4px; }
+.motion-flash.hit { background: var(--warning); color: #111; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-secondary); font-weight: 500; font-size: 12px; position: sticky; top: 0; background: var(--surface-1); }
+td.num, th.num { text-align: right; }
+.scroll { max-height: 420px; overflow: auto; border-radius: 8px; }
+tr.changed td { background: var(--surface-2); }
+.res { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; }
+.res.pass { color: var(--good-text); }
+.res.fail { color: var(--critical); }
+
+.how { margin-top: 16px; }
+.how svg { width: 100%; height: auto; display: block; margin: 6px 0 4px; }
+.how svg text { font-family: system-ui, sans-serif; }
+.how ol { padding-left: 20px; margin: 8px 0 0; }
+.how li { margin: 4px 0; color: var(--text-secondary); }
+.how li b { color: var(--text-primary); }
+.glossary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.glossary div { background: var(--surface-2); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--text-secondary); }
+.glossary b { display: block; color: var(--text-primary); margin-bottom: 2px; }
+
+@media (max-width: 980px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .glossary { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 520px) {
+  .settings { grid-template-columns: minmax(0, 1fr); }
+  .tile .value { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <div>
+      <h1>MPU6050 Live</h1>
+      <div class="sub">STM32F103C8T6 · I2C1 (PB6/PB7) · read over the ST-Link</div>
+    </div>
+    <div class="top-right">
+      <span class="pill" id="conn"><span class="dot"></span><span id="conn-text">Connecting…</span></span>
+      <span class="pill" id="sensor"><span class="dot"></span><span id="sensor-text">Sensor</span></span>
+      <button id="pause" aria-pressed="false">Pause</button>
+      <button id="theme" title="Toggle light/dark">Theme</button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner">
+    <b>✕ No data.</b> <span id="banner-msg"></span>
+    <ul>
+      <li>Is the ST-Link plugged in and the firmware flashed (<span class="mono">./flash.sh</span>)?</li>
+      <li>Only one program can use the ST-Link: close st-flash, st-util or another OpenOCD.</li>
+      <li>Is <span class="mono">openocd</span> installed (<span class="mono">sudo apt install openocd</span>)?</li>
+    </ul>
+  </div>
+
+  <section class="tiles" aria-label="Key values">
+    <div class="tile"><div class="label">Temperature (die)</div><div class="value num"><span id="t-temp">–</span><small>°C</small></div><div class="foot" id="t-temp-raw">raw –</div></div>
+    <div class="tile"><div class="label">Total acceleration |a|</div><div class="value num"><span id="t-mag">–</span><small>g</small></div><div class="foot">1.000 g when still</div></div>
+    <div class="tile"><div class="label">Sample rate</div><div class="value num"><span id="t-rate">–</span><small>Hz</small></div><div class="foot" id="t-rate-foot">configured –</div></div>
+    <div class="tile"><div class="label">I2C address · WHO_AM_I</div><div class="value num mono" style="font-size:22px" id="t-addr">–</div><div class="foot" id="t-addr-foot">–</div></div>
+  </section>
+
+  <div class="grid">
+    <div class="stack">
+      <section class="card">
+        <h2>Orientation</h2>
+        <p class="hint">Roll and pitch fuse accelerometer and gyro (complementary filter). Yaw is gyro-only and slowly drifts: the MPU6050 has no magnetometer.</p>
+        <div class="scene" aria-hidden="true">
+          <div class="camera">
+            <div class="board" id="board">
+              <div class="face bottom"></div>
+              <div class="face side-x r"></div><div class="face side-x l"></div>
+              <div class="face side-y t"></div><div class="face side-y b"></div>
+              <div class="face top">
+                <div class="chip">MPU-6050</div>
+                <span class="axis x">X</span><span class="axis y">Y</span><span class="axis z">Z</span>
+                <div class="pins"><span>VCC</span><span>GND</span><span>SCL</span><span>SDA</span><span>XDA</span><span>XCL</span><span>AD0</span><span>INT</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="angles">
+          <div class="angle"><div class="label">Roll (about X)</div><div class="value num" id="a-roll">–</div><div class="foot num" id="a-roll-acc">accel only –</div></div>
+          <div class="angle"><div class="label">Pitch (about Y)</div><div class="value num" id="a-pitch">–</div><div class="foot num" id="a-pitch-acc">accel only –</div></div>
+          <div class="angle"><div class="label">Yaw (about Z)</div><div class="value num" id="a-yaw">–</div><div class="foot">gyro only</div></div>
+        </div>
+        <div class="progress" id="calib-bar"><div></div></div>
+        <div class="note" id="calib-note"></div>
+        <div class="row">
+          <button data-cmd="calibrate">Recalibrate gyro</button>
+          <button data-cmd="reset_yaw">Reset yaw</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Sensor settings</h2>
+        <p class="hint">Written into the MPU6050 registers by the STM32 when you change them.</p>
+        <div class="settings">
+          <label>Accelerometer range
+            <select id="s-accel">
+              <option value="0">±2 g (16384 LSB/g)</option><option value="1">±4 g (8192 LSB/g)</option>
+              <option value="2">±8 g (4096 LSB/g)</option><option value="3">±16 g (2048 LSB/g)</option>
+            </select></label>
+          <label>Gyroscope range
+            <select id="s-gyro">
+              <option value="0">±250 °/s (131 LSB)</option><option value="1">±500 °/s (65.5 LSB)</option>
+              <option value="2">±1000 °/s (32.8 LSB)</option><option value="3">±2000 °/s (16.4 LSB)</option>
+            </select></label>
+          <label>Low-pass filter (DLPF)
+            <select id="s-dlpf">
+              <option value="0">0 · 260 Hz (gyro 8 kHz)</option><option value="1">1 · 184 Hz</option>
+              <option value="2">2 · 94 Hz</option><option value="3">3 · 44 Hz</option>
+              <option value="4">4 · 21 Hz</option><option value="5">5 · 10 Hz</option><option value="6">6 · 5 Hz</option>
+            </select></label>
+          <label>Sample rate
+            <select id="s-rate"></select></label>
+          <div class="field"><span>AD0 pin (PB13) → I2C address</span>
+            <span class="seg" role="group" aria-label="AD0 level">
+              <button id="ad0-0" data-ad0="0">Low · 0x68</button><button id="ad0-1" data-ad0="1">High · 0x69</button>
+            </span></div>
+          <div class="field"><span>Actions</span>
+            <span class="row" style="margin:0">
+              <button data-cmd="self_test">Run self-test</button>
+              <button data-cmd="reinit">Re-init sensor</button>
+            </span></div>
+        </div>
+        <div class="note" id="cmd-note"></div>
+      </section>
+
+      <section class="card">
+        <h2>Interrupts</h2>
+        <p class="hint">INT (PB12) goes high when a new sample is ready or motion is detected; reading INT_STATUS clears it.</p>
+        <div class="chips" id="int-chips">
+          <span class="chip-flag" data-bit="1">DATA_RDY</span>
+          <span class="chip-flag" data-bit="64">MOTION</span>
+          <span class="chip-flag" data-bit="16">FIFO_OFLOW</span>
+          <span class="chip-flag" data-bit="8">I2C_MST</span>
+        </div>
+        <dl class="kv">
+          <dt>INT pin (PB12)</dt><dd id="i-pin">–</dd>
+          <dt>Samples via INT pin</dt><dd id="i-pin-count">–</dd>
+          <dt>Motion events (&gt; 40 mg)</dt><dd><span class="motion-flash" id="i-motion">–</span></dd>
+          <dt>Total samples</dt><dd id="i-samples">–</dd>
+          <dt>I2C errors</dt><dd id="i-errors">–</dd>
+          <dt>MCU uptime</dt><dd id="i-uptime">–</dd>
+          <dt>Host reads</dt><dd id="i-poll">–</dd>
+        </dl>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card">
+        <div class="chart-head"><h2>Accelerometer <span class="hint">g</span></h2><div class="legend" id="lg-accel"></div></div>
+        <div class="chart-wrap"><canvas class="chart" id="c-accel" aria-label="Accelerometer X, Y, Z over the last 10 seconds"></canvas><div class="tooltip"></div></div>
+      </section>
+      <section class="card">
+        <div class="chart-head"><h2>Gyroscope <span class="hint">°/s, bias removed</span></h2><div class="legend" id="lg-gyro"></div></div>
+        <div class="chart-wrap"><canvas class="chart" id="c-gyro" aria-label="Gyroscope X, Y, Z over the last 10 seconds"></canvas><div class="tooltip"></div></div>
+      </section>
+      <section class="card">
+        <div class="chart-head"><h2>Angles <span class="hint">°</span></h2><div class="legend" id="lg-angles"></div></div>
+        <div class="chart-wrap"><canvas class="chart" id="c-angles" aria-label="Roll, pitch, yaw over the last 10 seconds"></canvas><div class="tooltip"></div></div>
+      </section>
+
+      <section class="card">
+        <h2>All measurements</h2>
+        <p class="hint">Raw values are the 16-bit numbers read from the sensor; the rest is converted using the current range.</p>
+        <table>
+          <thead><tr><th>Quantity</th><th class="num">X</th><th class="num">Y</th><th class="num">Z</th></tr></thead>
+          <tbody id="values"></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Self-test</h2>
+        <p class="hint" id="st-hint">The chip moves its own sensing elements and compares the response with factory trim values. Pass = within ±14 %.</p>
+        <table>
+          <thead><tr><th>Axis</th><th class="num">Trim code</th><th class="num">Factory trim</th><th class="num">Response</th><th class="num">Change</th><th>Result</th></tr></thead>
+          <tbody id="selftest"><tr><td colspan="6">Not run yet</td></tr></tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Register map</h2>
+        <p class="hint">Live snapshot of the MPU6050 registers (refreshed every second). Rows that changed are highlighted.</p>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>Addr</th><th>Name</th><th>Hex</th><th>Binary</th><th>Meaning</th></tr></thead>
+            <tbody id="regs" class="mono"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card how">
+    <h2>How it works</h2>
+    <p class="hint">Yes, a web page can show the sensor in real time, but a browser cannot talk to the ST-Link by itself. A small Python program reads the data and streams it to this page.</p>
+    <svg viewBox="0 0 1000 150" role="img" aria-label="Data path from the MPU6050 to the browser">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--text-muted)"/>
+        </marker>
+      </defs>
+      <g fill="var(--surface-2)" stroke="var(--border)">
+        <rect x="5" y="40" width="130" height="64" rx="10"/>
+        <rect x="205" y="40" width="150" height="64" rx="10"/>
+        <rect x="425" y="40" width="110" height="64" rx="10"/>
+        <rect x="605" y="40" width="160" height="64" rx="10"/>
+        <rect x="835" y="40" width="160" height="64" rx="10"/>
+      </g>
+      <g fill="var(--text-primary)" font-size="14" font-weight="600" text-anchor="middle">
+        <text x="70" y="68">MPU6050</text><text x="280" y="68">STM32F103</text><text x="480" y="68">ST-Link V2</text>
+        <text x="685" y="68">mpu6050_monitor.py</text><text x="915" y="68">Browser</text>
+      </g>
+      <g fill="var(--text-secondary)" font-size="11.5" text-anchor="middle">
+        <text x="70" y="88">accel · gyro · temp</text><text x="280" y="88">RAM: g_telemetry</text><text x="480" y="88">debug probe</text>
+        <text x="685" y="88">OpenOCD + fusion</text><text x="915" y="88">this page</text>
+      </g>
+      <g stroke="var(--text-muted)" stroke-width="2" marker-end="url(#arr)">
+        <line x1="137" y1="72" x2="201" y2="72"/><line x1="357" y1="72" x2="421" y2="72"/>
+        <line x1="537" y1="72" x2="601" y2="72"/><line x1="767" y1="72" x2="831" y2="72"/>
+      </g>
+      <g fill="var(--text-secondary)" font-size="11" text-anchor="middle">
+        <text x="170" y="32">I2C 100 kHz</text><text x="170" y="122">PB6 SCL · PB7 SDA</text><text x="170" y="138">INT → PB12</text>
+        <text x="390" y="32">SWD</text><text x="390" y="122">memory read,</text><text x="390" y="138">CPU keeps running</text>
+        <text x="570" y="32">USB</text>
+        <text x="800" y="32">HTTP</text><text x="800" y="122">Server-Sent</text><text x="800" y="138">Events, ~30/s</text>
+      </g>
+    </svg>
+    <ol>
+      <li><b>Sensor → STM32.</b> At 100 Hz the MPU6050 raises INT (PB12). The STM32 reads INT_STATUS and the 14 data bytes (accel, temperature, gyro) over I2C1.</li>
+      <li><b>STM32 RAM mailbox.</b> The firmware stores every sample, the settings, the self-test results and a register snapshot in one struct, <span class="mono">g_telemetry</span>.</li>
+      <li><b>ST-Link.</b> The debug probe can read RAM while the CPU runs. OpenOCD drives it, so no UART adapter is needed.</li>
+      <li><b>Python.</b> <span class="mono">mpu6050_monitor.py</span> reads the struct about 100 times a second, converts raw counts into g, °/s and °C, and computes roll/pitch/yaw. Commands from this page are written back into the struct.</li>
+      <li><b>Browser.</b> The page receives a JSON stream (Server-Sent Events) and redraws the board, the charts and the tables.</li>
+    </ol>
+    <div class="glossary">
+      <div><b>Accelerometer</b>Measures acceleration including gravity. Lying still, it reads 1 g straight up, and that tells you the tilt (roll and pitch). It is noisy when shaken.</div>
+      <div><b>Gyroscope</b>Measures how fast the board turns (°/s). Integrating it gives an angle that is smooth but slowly drifts. Keep the board still while it calibrates.</div>
+      <div><b>Temperature</b>The silicon die temperature (MPU-6050: raw / 340 + 36.53, MPU-6500: raw / 333.87 + 21). It reads a few degrees above room temperature.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const WINDOW_S = 10;
+  const AXES = ["X", "Y", "Z"];
+  const SERIES_VARS = ["--series-1", "--series-2", "--series-3"];
+  let state = null, paused = false, lastMotion = null, lastRegs = {};
+
+  // ---------- theme toggle ----------
+  try { const t = localStorage.getItem("mpu-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  $("theme").addEventListener("click", () => {
+    const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
+    const next = dark ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("mpu-theme", next); } catch (e) {}
+    charts.forEach((c) => c.dirty = true);
+  });
+  $("pause").addEventListener("click", (e) => {
+    paused = !paused;
+    e.currentTarget.setAttribute("aria-pressed", String(paused));
+    e.currentTarget.textContent = paused ? "Resume" : "Pause";
+  });
+
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const fmt = (v, d) => (v === null || v === undefined || Number.isNaN(v)) ? "–" : (v >= 0 ? " " : "") + v.toFixed(d);
+
+  // ---------- live line chart ----------
+  class LiveChart {
+    constructor(canvas, legendEl, names, opts) {
+      this.c = canvas; this.ctx = canvas.getContext("2d");
+      this.names = names; this.opts = opts; this.data = []; this.hover = null; this.dirty = true;
+      this.tip = canvas.parentElement.querySelector(".tooltip");
+      legendEl.innerHTML = names.map((n, i) =>
+        `<span class="item"><span class="sw" style="background:var(${SERIES_VARS[i]})"></span>${n} <span class="val num" data-i="${i}">–</span></span>`).join("");
+      this.vals = [...legendEl.querySelectorAll(".val")];
+      const move = (ev) => { const r = canvas.getBoundingClientRect(); this.hover = ev.clientX - r.left; this.dirty = true; };
+      canvas.addEventListener("pointermove", move);
+      canvas.addEventListener("pointerdown", move);
+      canvas.addEventListener("pointerleave", () => { this.hover = null; this.tip.style.display = "none"; this.dirty = true; });
+    }
+    push(t, values) {
+      this.data.push([t, values]);
+      while (this.data.length && this.data[0][0] < t - WINDOW_S - 1) this.data.shift();
+      this.vals.forEach((el, i) => el.textContent = fmt(values[i], this.opts.digits) + " " + this.opts.unit);
+      this.dirty = true;
+    }
+    range() {
+      let lo = Infinity, hi = -Infinity;
+      for (const [, v] of this.data) for (const x of v) { if (x < lo) lo = x; if (x > hi) hi = x; }
+      if (!isFinite(lo)) { lo = -1; hi = 1; }
+      const mid = (lo + hi) / 2, span = Math.max(hi - lo, this.opts.minSpan) * 1.15;
+      return niceRange(mid - span / 2, mid + span / 2);
+    }
+    draw() {
+      if (!this.dirty) return;
+      this.dirty = false;
+      const dpr = window.devicePixelRatio || 1, W = this.c.clientWidth, H = this.c.clientHeight;
+      if (this.c.width !== Math.round(W * dpr) || this.c.height !== Math.round(H * dpr)) {
+        this.c.width = Math.round(W * dpr); this.c.height = Math.round(H * dpr);
+      }
+      const g = this.ctx; g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+      const L = 46, R = 8, T = 8, B = 20, pw = W - L - R, ph = H - T - B;
+      const now = this.data.length ? this.data[this.data.length - 1][0] : 0, t0 = now - WINDOW_S;
+      const [lo, hi, step] = this.range();
+      const X = (t) => L + (t - t0) / WINDOW_S * pw, Y = (v) => T + (hi - v) / (hi - lo) * ph;
+
+      g.font = "11px system-ui, sans-serif"; g.textBaseline = "middle";
+      g.strokeStyle = css("--grid"); g.fillStyle = css("--text-muted"); g.lineWidth = 1;
+      for (let v = lo; v <= hi + step / 2; v += step) {
+        const y = Math.round(Y(v)) + 0.5;
+        g.beginPath(); g.moveTo(L, y); g.lineTo(W - R, y); g.stroke();
+        g.textAlign = "right"; g.fillText(trimNum(v), L - 6, y);
+      }
+      if (lo < 0 && hi > 0) { g.strokeStyle = css("--text-muted"); g.beginPath(); g.moveTo(L, Math.round(Y(0)) + .5); g.lineTo(W - R, Math.round(Y(0)) + .5); g.stroke(); }
+      g.textAlign = "center"; g.fillStyle = css("--text-muted");
+      for (let s = 0; s <= WINDOW_S; s += 2) g.fillText(s === 0 ? "now" : `−${s}s`, X(now - s), H - 8);
+
+      g.save(); g.beginPath(); g.rect(L, T, pw, ph); g.clip();
+      g.lineWidth = 2; g.lineJoin = "round"; g.lineCap = "round";
+      this.names.forEach((_, i) => {
+        g.strokeStyle = css(SERIES_VARS[i]); g.beginPath();
+        this.data.forEach(([t, v], k) => { const x = X(t), y = Y(v[i]); k ? g.lineTo(x, y) : g.moveTo(x, y); });
+        g.stroke();
+      });
+      g.restore();
+
+      if (this.hover !== null && this.data.length && this.hover >= L) {
+        const tt = t0 + (this.hover - L) / pw * WINDOW_S;
+        let best = this.data[0];
+        for (const d of this.data) if (Math.abs(d[0] - tt) < Math.abs(best[0] - tt)) best = d;
+        const x = X(best[0]);
+        g.strokeStyle = css("--text-muted"); g.lineWidth = 1; g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + ph); g.stroke();
+        this.names.forEach((_, i) => {
+          g.beginPath(); g.arc(x, Y(best[1][i]), 4.5, 0, 7);
+          g.fillStyle = css(SERIES_VARS[i]); g.fill(); g.lineWidth = 2; g.strokeStyle = css("--surface-1"); g.stroke();
+        });
+        this.tip.innerHTML = `<div style="color:var(--text-secondary);margin-bottom:2px">${(best[0] - now).toFixed(2)} s</div>` +
+          this.names.map((n, i) => `<div class="tt-row"><span class="sw" style="background:var(${SERIES_VARS[i]})"></span>${n}<b class="num" style="margin-left:auto;padding-left:10px">${fmt(best[1][i], this.opts.digits)} ${this.opts.unit}</b></div>`).join("");
+        this.tip.style.display = "block";
+        const tw = this.tip.offsetWidth;
+        this.tip.style.left = Math.min(Math.max(0, x + 12), W - tw) + "px";
+        this.tip.style.top = "6px";
+      }
+    }
+  }
+  function niceRange(lo, hi) {
+    const raw = (hi - lo) / 4, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw);
+    return [Math.floor(lo / step) * step, Math.ceil(hi / step) * step, step];
+  }
+  function trimNum(v) { const r = Math.abs(v) < 1e-9 ? 0 : v; return Math.abs(r) >= 100 ? r.toFixed(0) : +r.toFixed(2) + ""; }
+
+  const charts = [
+    new LiveChart($("c-accel"), $("lg-accel"), AXES, { unit: "g", digits: 3, minSpan: 0.4 }),
+    new LiveChart($("c-gyro"), $("lg-gyro"), AXES, { unit: "°/s", digits: 1, minSpan: 20 }),
+    new LiveChart($("c-angles"), $("lg-angles"), ["Roll", "Pitch", "Yaw"], { unit: "°", digits: 1, minSpan: 30 }),
+  ];
+  (function frame() { charts.forEach((c) => c.draw()); requestAnimationFrame(frame); })();
+  window.addEventListener("resize", () => charts.forEach((c) => c.dirty = true));
+
+  // ---------- 3D board ----------
+  function setBoard(rollDeg, pitchDeg, yawDeg) {
+    const r = rollDeg * Math.PI / 180, p = pitchDeg * Math.PI / 180, y = yawDeg * Math.PI / 180;
+    const cr = Math.cos(r), sr = Math.sin(r), cp = Math.cos(p), sp = Math.sin(p), cy = Math.cos(y), sy = Math.sin(y);
+    // R = Rz(yaw) * Ry(pitch) * Rx(roll), sensor frame (X right, Y forward, Z up)
+    const R = [
+      [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+      [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+      [-sp, cp * sr, cp * cr],
+    ];
+    // CSS has Y pointing down: conjugate with diag(1,-1,1)
+    const M = [
+      [R[0][0], -R[0][1], R[0][2]],
+      [-R[1][0], R[1][1], -R[1][2]],
+      [R[2][0], -R[2][1], R[2][2]],
+    ];
+    $("board").style.transform = `matrix3d(${M[0][0]},${M[1][0]},${M[2][0]},0,${M[0][1]},${M[1][1]},${M[2][1]},0,${M[0][2]},${M[1][2]},${M[2][2]},0,0,0,0,1)`;
+  }
+
+  // ---------- controls ----------
+  async function send(cmd, value = 0) {
+    $("cmd-note").textContent = "Sending…";
+    try {
+      const r = await fetch("/api/command", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cmd, value }) });
+      const j = await r.json();
+      $("cmd-note").textContent = j.ok ? "" : (j.error || "Command failed");
+    } catch (e) { $("cmd-note").textContent = "Command failed: " + e.message; }
+  }
+  document.querySelectorAll("[data-cmd]").forEach((b) => b.addEventListener("click", () => send(b.dataset.cmd)));
+  document.querySelectorAll("[data-ad0]").forEach((b) => b.addEventListener("click", () => send("ad0", +b.dataset.ad0)));
+  $("s-accel").addEventListener("change", (e) => send("accel_fs", +e.target.value));
+  $("s-gyro").addEventListener("change", (e) => send("gyro_fs", +e.target.value));
+  $("s-dlpf").addEventListener("change", (e) => send("dlpf", +e.target.value));
+  $("s-rate").addEventListener("change", (e) => send("rate_div", +e.target.value));
+  const RATE_DIVS = [99, 49, 19, 9, 4];
+  function fillRates(base, div) {
+    const sel = $("s-rate"), divs = RATE_DIVS.includes(div) ? RATE_DIVS : [...RATE_DIVS, div].sort((a, b) => b - a);
+    const html = divs.map((d) => `<option value="${d}">${+(base / (1 + d)).toFixed(1)} Hz (div ${d})</option>`).join("");
+    if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
+    if (document.activeElement !== sel) sel.value = String(div);
+  }
+  function setSelect(id, v) { const el = $(id); if (document.activeElement !== el) el.value = String(v); }
+
+  // ---------- rendering ----------
+  function setPill(id, cls, text) { const el = $(id); el.className = "pill " + cls; $(id + "-text").textContent = text; }
+
+  function render(s) {
+    if (!s.connected) {
+      setPill("conn", "bad", "Disconnected");
+      setPill("sensor", "", "Sensor –");
+      $("banner").classList.add("show"); $("banner-msg").textContent = s.error || "";
+      return;
+    }
+    $("banner").classList.remove("show");
+    setPill("conn", "ok", "Live · " + s.source);
+    setPill("sensor", s.mpu_ok ? "ok" : "bad", s.mpu_ok ? "MPU6050 OK" : "MPU6050 not responding");
+
+    const d = s.device, c = s.config, i = s.interrupts, k = s.counters, a = s.angles;
+    $("t-temp").textContent = s.temp_c.toFixed(2);
+    $("t-temp-raw").textContent = "raw " + s.raw.temp;
+    $("t-mag").textContent = s.accel_mag_g.toFixed(3);
+    $("t-rate").textContent = k.measured_rate_hz.toFixed(1);
+    $("t-rate-foot").textContent = `configured ${+c.sample_rate_hz.toFixed(1)} Hz`;
+    $("t-addr").textContent = `${d.i2c_addr} · ${d.who_am_i}`;
+    $("t-addr-foot").textContent = (d.known_chip ? "✓ " : "⚠ ") + d.chip + (d.ad0_matches ? "" : " · AD0 has no effect");
+
+    $("a-roll").textContent = fmt(a.roll, 1) + "°";
+    $("a-pitch").textContent = fmt(a.pitch, 1) + "°";
+    $("a-yaw").textContent = fmt(a.yaw, 1) + "°";
+    $("a-roll-acc").textContent = "accel only " + fmt(a.roll_acc, 1) + "°";
+    $("a-pitch-acc").textContent = "accel only " + fmt(a.pitch_acc, 1) + "°";
+    setBoard(a.roll, a.pitch, a.yaw);
+    const cal = s.calibration;
+    $("calib-bar").classList.toggle("show", cal.active);
+    $("calib-bar").firstElementChild.style.width = (cal.progress * 100).toFixed(0) + "%";
+    $("calib-note").textContent = cal.active ? "Calibrating gyro bias: keep the sensor still…" :
+      `Gyro bias removed: ${s.gyro_bias_dps.map((v) => v.toFixed(2)).join(" / ")} °/s`;
+
+    setSelect("s-accel", c.accel_fs); setSelect("s-gyro", c.gyro_fs); setSelect("s-dlpf", c.dlpf);
+    fillRates(c.dlpf === 0 ? 8000 : 1000, c.smplrt_div);
+    $("ad0-0").setAttribute("aria-pressed", String(d.ad0_level === 0));
+    $("ad0-1").setAttribute("aria-pressed", String(d.ad0_level === 1));
+    if (s.cmd_pending) $("cmd-note").textContent = "Applying…";
+    else if ($("cmd-note").textContent === "Applying…" || $("cmd-note").textContent === "Sending…") $("cmd-note").textContent = "";
+
+    document.querySelectorAll("#int-chips .chip-flag").forEach((el) => el.classList.toggle("on", (i.int_status & +el.dataset.bit) !== 0));
+    $("i-pin").textContent = i.int_pin_count ? (i.via_int_pin ? "✓ working (last sample via INT)" : "✓ working") : "⚠ no pulses seen, using polling";
+    $("i-pin-count").textContent = i.int_pin_count.toLocaleString();
+    if (lastMotion !== null && i.motion_count > lastMotion) {
+      const el = $("i-motion"); el.classList.add("hit"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("hit"), 400);
+    }
+    lastMotion = i.motion_count;
+    $("i-motion").textContent = i.motion_count.toLocaleString();
+    $("i-samples").textContent = k.sample_count.toLocaleString();
+    $("i-errors").textContent = d.i2c_errors.toLocaleString();
+    $("i-uptime").textContent = d.uptime_s.toFixed(1) + " s";
+    $("i-poll").textContent = k.poll_rate_hz.toFixed(0) + " per second";
+
+    const rows = [
+      ["Accel raw (LSB)", s.raw.accel, 0], ["Accel (g)", s.accel_g, 4], ["Accel (m/s²)", s.accel_ms2, 3],
+      ["Gyro raw (LSB)", s.raw.gyro, 0], ["Gyro (°/s)", s.gyro_dps, 2], ["Gyro bias (°/s)", s.gyro_bias_dps, 2],
+    ];
+    $("values").innerHTML = rows.map(([n, v, dg]) => `<tr><td>${n}</td>${v.map((x) => `<td class="num">${fmt(x, dg)}</td>`).join("")}</tr>`).join("") +
+      `<tr><td>Temperature</td><td class="num" colspan="3">${s.temp_c.toFixed(2)} °C (raw ${s.raw.temp})</td></tr>`;
+
+    const st = s.selftest;
+    if (st.done) {
+      $("st-hint").textContent = `Run #${st.count}: ${st.pass ? "all axes pass" : "some axes fail"}. ${st.criteria}. "Change" is the response relative to the factory value.`;
+      $("selftest").innerHTML = st.axes.map((x) => `<tr><td>${x.name}</td><td class="num">${x.code}</td><td class="num">${x.factory_trim.toFixed(0)}</td>` +
+        `<td class="num">${x.response}</td><td class="num">${x.change_pct === null ? "–" : (x.change_pct >= 0 ? "+" : "") + x.change_pct.toFixed(1) + " %"}</td>` +
+        `<td>${x.pass ? '<span class="res pass">✓ Pass</span>' : '<span class="res fail">✕ Fail</span>'}</td></tr>`).join("");
+    }
+
+    const nowMs = performance.now();
+    const regsHtml = s.registers.map((r) => {
+      const prev = lastRegs[r.addr];
+      if (!prev || prev.value !== r.value) {
+        const isData = r.addr >= 0x3B && r.addr <= 0x48;  // sensor outputs change all the time
+        lastRegs[r.addr] = { value: r.value, at: prev && !isData ? nowMs : -Infinity };
+      }
+      const changed = nowMs - lastRegs[r.addr].at < 2000;
+      return `<tr${changed ? ' class="changed"' : ""}><td>0x${r.addr.toString(16).toUpperCase().padStart(2, "0")}</td><td>${r.name}</td>` +
+        `<td>0x${r.value.toString(16).toUpperCase().padStart(2, "0")}</td><td>${r.value.toString(2).padStart(8, "0")}</td><td style="font-family:system-ui">${r.decoded}</td></tr>`;
+    }).join("");
+    if ($("regs").dataset.html !== regsHtml) { $("regs").innerHTML = regsHtml; $("regs").dataset.html = regsHtml; }
+
+    const t = s.t;
+    charts[0].push(t, s.accel_g);
+    charts[1].push(t, s.gyro_dps);
+    charts[2].push(t, [a.roll, a.pitch, a.yaw]);
+  }
+
+  // ---------- data stream ----------
+  function connect() {
+    const es = new EventSource("/events");
+    es.onmessage = (ev) => { state = JSON.parse(ev.data); if (!paused) render(state); };
+    es.onerror = () => {
+      setPill("conn", "bad", "Monitor not running");
+      $("banner").classList.add("show");
+      $("banner-msg").textContent = "Lost connection to mpu6050_monitor.py. Start it with --web.";
+    };
+  }
+  setBoard(0, 0, 0);
+  connect();
+})();
+</script>
+</body>
+</html>

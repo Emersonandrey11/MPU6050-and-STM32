@@ -1,0 +1,19 @@
+# Build output (CMake presets write to build/<preset>)
+build/
+*.elf
+*.bin
+*.hex
+*.map
+*.su
+
+# Python
+__pycache__/
+*.pyc
+
+# Captured sensor data
+*.csv
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
