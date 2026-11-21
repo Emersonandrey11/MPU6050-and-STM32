@@ -17,6 +17,8 @@ No HAL. No CubeMX code. No UART adapter. About 1,200 lines of commented C that y
 
 ### 📖 [Read the interactive guide →](https://emersonandrey11.github.io/MPU6050-and-STM32/)
 
+<img src="docs/project-card.jpg" width="480" alt="Project card: photos of the GY-521 MPU-6050 module and the STM32 Blue Pill, with the sensor's ranges: accelerometer ±16 g, gyroscope ±2000 °/s, temperature −40 to 85 °C">
+
 </div>
 
 ---
