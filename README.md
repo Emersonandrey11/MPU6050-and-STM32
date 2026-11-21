@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="docs/logo.svg" width="128" height="128" alt="Logo: a chip with the three motion axes of the MPU6050">
+
 # MPU6050 + STM32, bare metal
 
 **Learn how a real sensor driver works by reading one from the first instruction after reset to a live web dashboard.**
