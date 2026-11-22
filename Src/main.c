@@ -9,9 +9,13 @@
  *   PB13 AD0  -> I2C address select, driven low (0x68) by default
  *   PB10 XCL  / PB11 XDA  -> MPU6050 auxiliary bus, left high-impedance
  *   PC13 LED  -> heartbeat: slow blink = sensor OK, fast blink = sensor missing
+ *   PA11 D- / PA12 D+ -> native USB: power, USB serial link, DFU flashing
+ *   PA5 SCK / PA7 SDI / PA6 SDO, PA4 CS, PA3 DC, PA2 RESET, PB0 LED
+ *             -> 2.8" ST7789V TFT on SPI1 (ui.c draws the dashboard)
  *
- * Every new sample is published in g_telemetry (see telemetry.h), which the
- * PC reads through the ST-Link with tools/mpu6050_monitor.py.
+ * Every new sample is published in g_telemetry (see telemetry.h). The PC
+ * (tools/mpu6050_monitor.py) gets it either through the ST-Link (reading RAM)
+ * or as frames over the native USB port (USB serial, usb_cdc.c).
  ******************************************************************************
  */
 
@@ -22,6 +26,10 @@
 #include "stm32f103_regs.h"
 #include "telemetry.h"
 #include "timebase.h"
+#include "ui.h"
+#include "usb.h"
+#include "usb_cdc.h"
+#include "usb_ids.h"
 
 #define BLINK_PERIOD_MS       1500U   /* heartbeat while the MPU6050 works   */
 #define BLINK_ERROR_MS        100U    /* fast blink: MPU6050 not responding  */
@@ -29,6 +37,7 @@
 #define REG_DUMP_PERIOD_MS    1000U
 #define RETRY_PERIOD_MS       1000U
 #define MAX_READ_FAILURES     10U
+#define USB_IDLE_FRAME_MS     100U    /* resend status even without new samples */
 
 #define COMPILER_BARRIER()    __asm volatile ("" ::: "memory")
 
@@ -51,6 +60,10 @@ static uint32_t s_last_dump_ms;
 static uint32_t s_last_retry_ms;
 static uint32_t s_last_cmd_seq;
 static uint8_t  s_regs[128];
+static uint32_t s_usb_sent_count;
+static uint32_t s_usb_sent_ms;
+
+static void enter_bootloader(void);
 
 /* ---- Telemetry helpers -------------------------------------------------- */
 
@@ -317,6 +330,9 @@ static void handle_command(void)
         set_ad0(arg);
         mpu_start();
         break;
+    case TM_CMD_ENTER_BOOTLOADER:
+        enter_bootloader();
+        break;
     default:
         break;
     }
@@ -325,6 +341,84 @@ static void handle_command(void)
     tm_publish_config();
     g_telemetry.cmd_ack = seq;
     tm_end();
+}
+
+/* ---- Native USB link ---------------------------------------------------- */
+
+/* CRC-16/XMODEM (poly 0x1021, init 0): the same as Python's binascii.crc_hqx */
+static uint16_t crc16_xmodem(const uint8_t *p, uint32_t n)
+{
+    uint16_t crc = 0U;
+    while (n--) {
+        crc ^= (uint16_t)(*p++ << 8);
+        for (int b = 0; b < 8; b++) {
+            crc = (crc & 0x8000U) ? (uint16_t)((crc << 1) ^ 0x1021U) : (uint16_t)(crc << 1);
+        }
+    }
+    return crc;
+}
+
+/* Send g_telemetry as one frame after every new sample (and at least every
+ * USB_IDLE_FRAME_MS, so the PC also sees "sensor missing"). If the previous
+ * frame is still on its way, this sample is skipped: the PC integrates the
+ * gyro from gyro_int, so a skipped frame loses nothing. */
+static void usb_stream(uint32_t now)
+{
+    uint8_t frame[sizeof(telemetry_t) + 2U];
+    uint32_t count = g_telemetry.sample_count;
+
+    if (!usb_cdc_ready() ||
+        ((count == s_usb_sent_count) && ((now - s_usb_sent_ms) < USB_IDLE_FRAME_MS))) {
+        return;
+    }
+    const volatile uint8_t *src = (const volatile uint8_t *)&g_telemetry;
+    for (uint32_t i = 0; i < sizeof(telemetry_t); i++) {
+        frame[i] = src[i];
+    }
+    uint16_t crc = crc16_xmodem(frame, sizeof(telemetry_t));
+    frame[sizeof(telemetry_t)]      = (uint8_t)crc;
+    frame[sizeof(telemetry_t) + 1U] = (uint8_t)(crc >> 8);
+    if (usb_cdc_send(frame, sizeof frame) == 0) {
+        s_usb_sent_count = count;
+        s_usb_sent_ms = now;
+    }
+}
+
+/* Command frames from the PC: 'M' 'C' seq(4, little endian) id arg. They are
+ * stored exactly where the ST-Link path writes them, so handle_command()
+ * treats both paths the same. Runs in the USB interrupt. */
+void usb_cdc_on_rx(const uint8_t *data, uint32_t len)
+{
+    static uint8_t frame[8];
+    static uint32_t pos;
+
+    for (uint32_t i = 0; i < len; i++) {
+        uint8_t b = data[i];
+        if (((pos == 0U) && (b != 'M')) || ((pos == 1U) && (b != 'C'))) {
+            pos = (b == 'M') ? 1U : 0U;
+            continue;
+        }
+        frame[pos++] = b;
+        if (pos == sizeof frame) {
+            pos = 0U;
+            g_telemetry.cmd_id  = frame[6];
+            g_telemetry.cmd_arg = frame[7];
+            COMPILER_BARRIER();
+            g_telemetry.cmd_seq = (uint32_t)frame[2] | ((uint32_t)frame[3] << 8) |
+                                  ((uint32_t)frame[4] << 16) | ((uint32_t)frame[5] << 24);
+        }
+    }
+}
+
+/* Leave a note in a backup register (it survives the reset) and restart:
+ * the bootloader sees it and stays in DFU mode. */
+static void enter_bootloader(void)
+{
+    RCC_APB1ENR |= RCC_APB1ENR_PWREN | RCC_APB1ENR_BKPEN;
+    PWR_CR |= PWR_CR_DBP;
+    BKP_DR1 = BOOT_REQUEST_MAGIC;
+    usb_stop();                         /* also tells the PC the device left */
+    system_reset();
 }
 
 static void heartbeat(uint32_t now)
@@ -346,6 +440,8 @@ int main(void)
     board_init();
     i2c_init();
     telemetry_init();
+    usb_cdc_init();                     /* interrupt driven: enumerates during ui_init */
+    ui_init();                          /* ~0.5 s: panel reset + layout */
     mpu_start();
 
     for (;;) {
@@ -366,6 +462,13 @@ int main(void)
         }
 
         heartbeat(now);
+        ui_task(now);                   /* a few small drawing jobs at most */
+        usb_stream(now);
+
+        if (usb_cdc_bootloader_requested()) {     /* PC set 1200 baud */
+            delay_ms(20);                         /* let the USB status stage finish */
+            enter_bootloader();
+        }
         /* No WFI here: the ST-Link must be able to read RAM at any time,
          * and reads during sleep returned zeros on this board. */
     }

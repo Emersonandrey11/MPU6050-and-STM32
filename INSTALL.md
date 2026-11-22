@@ -140,6 +140,35 @@ if it does, *Private networks* is enough.
 
 ---
 
+## 8. Flashing over USB (optional, after step 6)
+
+Step 6 also wrote the project's **USB DFU bootloader**. From now on the application can be updated
+through the Blue Pill's own micro-USB port, without the ST-Link:
+
+1. Install **dfu-util** for Windows (https://dfu-util.sourceforge.net) and add its folder to `PATH`.
+2. Plug the Blue Pill's micro-USB port into the PC. It appears as a USB serial port (`COMx`,
+   USB ID 1209:0001); Windows 10/11 loads the driver by itself. Note the COM number in Device Manager.
+3. Put the board in the bootloader once (BOOT1 jumper to 1, press RESET; the LED double-blinks).
+   It appears as **MPU6050 DFU bootloader** (1209:0002). Open **Zadig** (https://zadig.akeo.ie),
+   choose that device and install **WinUSB**. Put BOOT1 back to 0 and press RESET.
+4. Flash over USB:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\flash-usb.ps1 -Port COM5
+```
+
+The script asks the running application to restart into the bootloader (it opens the port at 1200 baud)
+and writes the new application with `dfu-util`. Live data over USB:
+
+```powershell
+python tools\mpu6050_monitor.py --usb COM5 --web
+```
+
+If the PC does not detect the board at all, check the D+ pull-up resistor R10 on the Blue Pill:
+it must be 1.5 kΩ (many boards have 10 kΩ or 4.7 kΩ). Debugging with breakpoints still uses the ST-Link.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -153,13 +182,21 @@ if it does, *Private networks* is enough.
 | Monitor: source shows `halt-mode reads` | Live memory reads failed, the monitor pauses the CPU ~1 ms per read instead. Data is still correct. |
 | Monitor: `I2C errors` keeps increasing | Loose SDA/SCL wire or missing pull-ups on the sensor board. |
 | Escape codes like `←[H` in the terminal | Use Windows Terminal or PowerShell 7 instead of the old `cmd.exe` window. |
+| USB: board not detected at all | Data cable (not charge-only)? R10 = 1.5 kΩ? 8 MHz crystal present (USB needs it)? |
+| USB: `flash-usb.ps1` says bootloader not found | WinUSB driver installed with Zadig (step 8)? Or set BOOT1 = 1, press RESET, run it again. |
 
 ---
 
 ## Linux quick reference
 
 ```bash
-sudo apt install openocd stlink-tools python3
-./flash.sh                                  # build + flash (uses the STM32Cube VS Code bundles)
+sudo apt install openocd stlink-tools python3 dfu-util
+./flash.sh                                  # build + flash bootloader + app (uses the STM32Cube VS Code bundles)
 python3 tools/mpu6050_monitor.py --web
+
+# Native USB (after ./flash.sh once):
+sudo cp tools/udev/50-mpu6050-usb.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules && sudo udevadm trigger
+./flash-usb.sh                              # build + flash the app over USB
+python3 tools/mpu6050_monitor.py --usb --web
 ```

@@ -32,7 +32,9 @@
 MEMORY
 {
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 20K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 64K
+  /* The first 8 KB hold the USB DFU bootloader (bootloader/bootloader.ld),
+   * so the application starts at 0x08002000 (APP_BASE in Inc/usb_ids.h). */
+  FLASH    (rx)    : ORIGIN = 0x8002000,   LENGTH = 56K
 }
 
 /* Entry Point */

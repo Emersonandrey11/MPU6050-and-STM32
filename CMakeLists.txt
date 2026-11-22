@@ -34,6 +34,14 @@ target_sources(${PROJECT_NAME} PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/Src/timebase.c
   ${CMAKE_CURRENT_SOURCE_DIR}/Src/i2c.c
   ${CMAKE_CURRENT_SOURCE_DIR}/Src/mpu6050.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/spi.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/st7789.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/gfx.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/font_data.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/ui.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/clock.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/usb.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/usb_cdc.c
 )
 
 # Add include directories
@@ -64,4 +72,36 @@ target_link_directories(${PROJECT_NAME} PRIVATE
 # Add additional linker libraries
 target_link_libraries(${PROJECT_NAME} PRIVATE
   # Add additional linker libraries here
+  m   # atan2f/sqrtf for the TFT tilt readout (the -lm in flags.cmake comes before the objects)
 )
+
+# ---------------------------------------------------------------------------
+# USB DFU bootloader: a second, independent image in the first 8 KB of flash
+# (bootloader/bootloader.ld). It shares the USB core, the clock set-up and the
+# startup file with the application, and is always optimised for size so it
+# fits in 8 KB even in a Debug build.
+# ---------------------------------------------------------------------------
+add_executable(bootloader
+  ${CMAKE_CURRENT_SOURCE_DIR}/bootloader/dfu_bootloader.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/usb.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/clock.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/timebase.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/startup_stm32f103xx.S
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/syscall.c   # newlib stubs (unused, avoid link warnings)
+  ${CMAKE_CURRENT_SOURCE_DIR}/Src/sysmem.c
+)
+set_target_properties(bootloader PROPERTIES SUFFIX ".elf")
+target_include_directories(bootloader PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Inc)
+target_compile_options(bootloader PRIVATE
+  ${CPU_FLAGS}
+  $<$<COMPILE_LANGUAGE:C>:-std=gnu11 -Os -g3 -Wall -Wextra -Wpedantic -Wno-unused-parameter>
+  $<$<COMPILE_LANGUAGE:ASM>:-x assembler-with-cpp>
+)
+target_link_options(bootloader PRIVATE
+  ${CPU_FLAGS}
+  -T${CMAKE_CURRENT_SOURCE_DIR}/bootloader/bootloader.ld
+  --specs=nano.specs --specs=nosys.specs
+  -Wl,-Map=${CMAKE_CURRENT_BINARY_DIR}/bootloader.map
+  -Wl,--print-memory-usage
+)
+set_target_properties(bootloader PROPERTIES LINK_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/bootloader/bootloader.ld)

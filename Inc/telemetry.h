@@ -12,6 +12,10 @@
  * block from low to high addresses and accepts it only if seq_head equals
  * seq_tail.
  *
+ * Over the native USB port the same struct is streamed as a frame:
+ *   [248 bytes g_telemetry][CRC-16/XMODEM, little endian]
+ * and commands come back as 8-byte frames: 'M' 'C' cmd_seq(u32 LE) cmd_id cmd_arg.
+ *
  * Keep this layout in sync with TELEMETRY_FORMAT in tools/mpu6050_monitor.py.
  */
 #ifndef TELEMETRY_H
@@ -36,6 +40,7 @@
 #define TM_CMD_SELF_TEST        5U
 #define TM_CMD_REINIT           6U
 #define TM_CMD_SET_AD0          7U      /* arg 0/1 -> address 0x68/0x69 */
+#define TM_CMD_ENTER_BOOTLOADER 8U      /* restart into the USB DFU bootloader */
 
 typedef struct {
     /* ---- written by the firmware ---- */

@@ -11,7 +11,10 @@
 #include "stm32f103_regs.h"
 
 #define I2C_SPEED_HZ   100000UL   /* standard mode */
-#define I2C_TIMEOUT    20000UL    /* polling iterations, roughly 10-20 ms */
+/* Loop counts scale with the CPU clock so they mean the same time at any
+ * speed (they were tuned at 8 MHz). */
+#define CLOCK_SCALE    (CORE_CLOCK_HZ / 8000000UL)
+#define I2C_TIMEOUT    (20000UL * CLOCK_SCALE)   /* polling iterations, roughly 10-20 ms */
 
 static uint32_t s_errors;
 
@@ -19,7 +22,7 @@ static uint32_t s_errors;
 
 static void bus_delay(void)
 {
-    for (volatile uint32_t i = 0; i < 10U; i++) {
+    for (volatile uint32_t i = 0; i < 10UL * CLOCK_SCALE; i++) {   /* ~5 us: <= 100 kHz bit-banging */
     }
 }
 
@@ -75,8 +78,8 @@ void i2c_init(void)
     I2C1_CR1 = 0U;
 
     I2C1_CR2   = PCLK1_HZ / 1000000UL;              /* APB1 clock in MHz      */
-    I2C1_CCR   = PCLK1_HZ / (2UL * I2C_SPEED_HZ);   /* 40 -> 100 kHz          */
-    I2C1_TRISE = (PCLK1_HZ / 1000000UL) + 1UL;      /* 1000 ns max rise time  */
+    I2C1_CCR   = PCLK1_HZ / (2UL * I2C_SPEED_HZ);   /* 24 MHz: 120 -> 100 kHz */
+    I2C1_TRISE = (PCLK1_HZ / 1000000UL) + 1UL;      /* 25: 1000 ns rise time  */
     I2C1_CR1   = I2C_CR1_PE;
 }
 

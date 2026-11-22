@@ -1,5 +1,6 @@
 # Build the Debug configuration and flash it to the STM32F103C8T6 via ST-Link V2.
-# Windows counterpart of flash.sh.
+# Windows counterpart of flash.sh. Writes the USB DFU bootloader (0x08000000)
+# and the application (0x08002000); afterwards flash-usb.ps1 can update the app.
 #
 #   powershell -ExecutionPolicy Bypass -File .\flash.ps1            # build + flash
 #   powershell -ExecutionPolicy Bypass -File .\flash.ps1 -NoBuild   # flash only (built in VS Code)
@@ -31,19 +32,22 @@ if (-not $NoBuild) {
 }
 
 $elf = "build/Debug/mpu6050.elf"
-if (-not (Test-Path $elf)) { throw "$elf not found. Build first." }
+$boot = "build/Debug/bootloader.elf"
+foreach ($f in @($elf, $boot)) { if (-not (Test-Path $f)) { throw "$f not found. Build first." } }
 
 if (Get-Process openocd -ErrorAction SilentlyContinue) {
     throw "openocd is running and holds the ST-Link: stop mpu6050_monitor.py / openocd first."
 }
 
 if (Have "STM32_Programmer_CLI") {
-    STM32_Programmer_CLI -c port=SWD -w $elf -v -rst
+    STM32_Programmer_CLI -c port=SWD -w $boot -v -w $elf -v -rst
 } elseif (Have "openocd") {
-    openocd -f interface/stlink.cfg -c "set CPUTAPID 0" -f target/stm32f1x.cfg -c "program $elf verify reset exit"
+    openocd -f interface/stlink.cfg -c "set CPUTAPID 0" -f target/stm32f1x.cfg -c "program $boot verify" -c "program $elf verify reset exit"
 } elseif (Have "st-flash") {
     arm-none-eabi-objcopy -O binary $elf build/Debug/mpu6050.bin
-    st-flash --reset write build/Debug/mpu6050.bin 0x08000000
+    arm-none-eabi-objcopy -O binary $boot build/Debug/bootloader.bin
+    st-flash write build/Debug/bootloader.bin 0x08000000
+    if ($LASTEXITCODE -eq 0) { st-flash --reset write build/Debug/mpu6050.bin 0x08002000 }
 } else {
     throw "No flasher found. Install OpenOCD (INSTALL.md, step 4)."
 }

@@ -1,0 +1,179 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 860" width="1280" height="860" role="img" aria-labelledby="t d">
+<title id="t">Wiring: MPU6050 (GY-521) and 2.8 inch ST7789V TFT on an STM32F103 Blue Pill</title>
+<desc id="d">TFT on SPI1: SCK PA5, SDI PA7, SDO PA6, CS PA4, DC PA3, RESET PA2, LED PB0, VCC 3.3 V, GND. MPU6050 on I2C1: SCL PB6, SDA PB7, INT PB12, AD0 PB13, XCL PB10, XDA PB11. ST-Link on PA13/PA14.</desc>
+<style>
+text{font-family:Inter,"Segoe UI",Helvetica,Arial,sans-serif;fill:#1d232b}
+.m{font-family:"JetBrains Mono",Consolas,"DejaVu Sans Mono",monospace}
+.h{font-size:26px;font-weight:800}.s{font-size:15px;fill:#5b6472}
+.bt{font-size:19px;font-weight:800}.bs{font-size:13px;fill:#5b6472}
+.pin{font-size:15px;font-weight:700}.fn{font-size:12px;fill:#6b7280}
+.net{font-size:12px;font-weight:700}.mp{font-size:15px;font-weight:700}
+.note{font-size:14px;fill:#3b414b}.nt{font-size:13px;font-weight:800;letter-spacing:1.5px;fill:#5b6472}
+</style>
+<rect width="1280" height="860" fill="#ffffff"/>
+<text x="40" y="52" class="h">Blue Pill + MPU6050 + 2.8″ ST7789V TFT</text>
+<text x="40" y="80" class="s">Display on SPI1 (no remap), sensor on I²C1, debugger on SWD. Wire colours are only for reading the diagram.</text>
+<rect x="470" y="120" width="340" height="560" rx="14" fill="#eef3fb" stroke="#1f4f8f" stroke-width="2.5"/>
+<rect x="585.0" y="182" width="110" height="56" rx="6" fill="#1d232b"/>
+<text x="640.0" y="215" text-anchor="middle" class="m" style="font-size:11px;fill:#cfd6e0">STM32F103</text>
+<text x="640.0" y="160" text-anchor="middle" class="bt">STM32F103C8T6 “Blue Pill”</text>
+<text x="640.0" y="260" text-anchor="middle" class="bs">8 MHz HSI · 3.3 V logic</text>
+<rect x="1010" y="185" width="230" height="474" rx="12" fill="#f4f1fb" stroke="#5b3fa8" stroke-width="2.5"/>
+<text x="1125.0" y="155" text-anchor="middle" class="bt">2.8″ TFT · ST7789V</text>
+<text x="1125.0" y="173" text-anchor="middle" class="bs">240 × 320, RGB565, 4-wire SPI</text>
+<rect x="1120" y="225" width="96" height="128" rx="4" fill="#0a1220" stroke="#1d232b" stroke-width="2"/>
+<rect x="1120" y="225" width="96" height="12" rx="3" fill="#16294a"/>
+<rect x="1128" y="247" width="22" height="7" rx="2" fill="#f0a24a"/>
+<rect x="1128" y="265" width="22" height="7" rx="2" fill="#f0a24a" opacity=".75"/>
+<rect x="1156" y="247" width="22" height="7" rx="2" fill="#6f9dff"/>
+<rect x="1156" y="265" width="22" height="7" rx="2" fill="#6f9dff" opacity=".75"/>
+<rect x="1184" y="247" width="22" height="7" rx="2" fill="#4fc9a4"/>
+<rect x="1184" y="265" width="22" height="7" rx="2" fill="#4fc9a4" opacity=".75"/>
+<polyline points="1126,330 1140,323 1154,333 1168,317 1182,327 1196,321 1210,329" fill="none" stroke="#4fc9a4" stroke-width="2"/>
+<polyline points="1126,310 1140,313 1154,305 1168,311 1182,307 1196,315 1210,309" fill="none" stroke="#f0a24a" stroke-width="2"/>
+<line x1="810" y1="230" x2="1010" y2="230" stroke="#d64545" stroke-width="3.5" stroke-linecap="round"/>
+<text x="910.0" y="221" text-anchor="middle" class="net" style="fill:#d64545">3.3 V</text>
+<circle cx="810" cy="230" r="5.5" fill="#fff" stroke="#d64545" stroke-width="3"/>
+<circle cx="1010" cy="230" r="5.5" fill="#fff" stroke="#d64545" stroke-width="3"/>
+<text x="794" y="235" text-anchor="end" class="m"><tspan class="fn">power  </tspan><tspan class="pin">3.3</tspan></text>
+<text x="1026" y="235" class="m mp">1 VCC</text>
+<line x1="810" y1="278" x2="1010" y2="278" stroke="#2b2f36" stroke-width="3.5" stroke-linecap="round"/>
+<text x="910.0" y="269" text-anchor="middle" class="net" style="fill:#2b2f36">GND</text>
+<circle cx="810" cy="278" r="5.5" fill="#fff" stroke="#2b2f36" stroke-width="3"/>
+<circle cx="1010" cy="278" r="5.5" fill="#fff" stroke="#2b2f36" stroke-width="3"/>
+<text x="794" y="283" text-anchor="end" class="m"><tspan class="fn">ground  </tspan><tspan class="pin">G</tspan></text>
+<text x="1026" y="283" class="m mp">2 GND</text>
+<line x1="810" y1="326" x2="1010" y2="326" stroke="#e8833a" stroke-width="3.5" stroke-linecap="round"/>
+<text x="910.0" y="317" text-anchor="middle" class="net" style="fill:#e8833a">CS</text>
+<circle cx="810" cy="326" r="5.5" fill="#fff" stroke="#e8833a" stroke-width="3"/>
+<circle cx="1010" cy="326" r="5.5" fill="#fff" stroke="#e8833a" stroke-width="3"/>
+<text x="794" y="331" text-anchor="end" class="m"><tspan class="fn">GPIO out  </tspan><tspan class="pin">PA4</tspan></text>
+<text x="1026" y="331" class="m mp">3 CS</text>
+<line x1="810" y1="374" x2="1010" y2="374" stroke="#c2408a" stroke-width="3.5" stroke-linecap="round"/>
+<text x="910.0" y="365" text-anchor="middle" class="net" style="fill:#c2408a">RESET</text>
+<circle cx="810" cy="374" r="5.5" fill="#fff" stroke="#c2408a" stroke-width="3"/>
+<circle cx="1010" cy="374" r="5.5" fill="#fff" stroke="#c2408a" stroke-width="3"/>
+<text x="794" y="379" text-anchor="end" class="m"><tspan class="fn">GPIO out  </tspan><tspan class="pin">PA2</tspan></text>
+<text x="1026" y="379" class="m mp">4 RESET</text>
+<line x1="810" y1="422" x2="1010" y2="422" stroke="#159a72" stroke-width="3.5" stroke-linecap="round"/>
+<text x="910.0" y="413" text-anchor="middle" class="net" style="fill:#159a72">D/C</text>
+<circle cx="810" cy="422" r="5.5" fill="#fff" stroke="#159a72" stroke-width="3"/>
+<circle cx="1010" cy="422" r="5.5" fill="#fff" stroke="#159a72" stroke-width="3"/>
+<text x="794" y="427" text-anchor="end" class="m"><tspan class="fn">GPIO out  </tspan><tspan class="pin">PA3</tspan></text>
+<text x="1026" y="427" class="m mp">5 DC</text>
+<line x1="810" y1="470" x2="1010" y2="470" stroke="#2f6fdf" stroke-width="3.5" stroke-linecap="round"/>
+<text x="910.0" y="461" text-anchor="middle" class="net" style="fill:#2f6fdf">MOSI</text>
+<circle cx="810" cy="470" r="5.5" fill="#fff" stroke="#2f6fdf" stroke-width="3"/>
+<circle cx="1010" cy="470" r="5.5" fill="#fff" stroke="#2f6fdf" stroke-width="3"/>
+<text x="794" y="475" text-anchor="end" class="m"><tspan class="fn">SPI1_MOSI  </tspan><tspan class="pin">PA7</tspan></text>
+<text x="1026" y="475" class="m mp">6 SDI</text>
+<line x1="810" y1="518" x2="1010" y2="518" stroke="#c99400" stroke-width="3.5" stroke-linecap="round"/>
+<text x="910.0" y="509" text-anchor="middle" class="net" style="fill:#c99400">SCK</text>
+<circle cx="810" cy="518" r="5.5" fill="#fff" stroke="#c99400" stroke-width="3"/>
+<circle cx="1010" cy="518" r="5.5" fill="#fff" stroke="#c99400" stroke-width="3"/>
+<text x="794" y="523" text-anchor="end" class="m"><tspan class="fn">SPI1_SCK  </tspan><tspan class="pin">PA5</tspan></text>
+<text x="1026" y="523" class="m mp">7 SCK</text>
+<line x1="810" y1="566" x2="1010" y2="566" stroke="#3a9a3a" stroke-width="3.5" stroke-linecap="round"/>
+<text x="910.0" y="557" text-anchor="middle" class="net" style="fill:#3a9a3a">BACKLIGHT PWM</text>
+<circle cx="810" cy="566" r="5.5" fill="#fff" stroke="#3a9a3a" stroke-width="3"/>
+<circle cx="1010" cy="566" r="5.5" fill="#fff" stroke="#3a9a3a" stroke-width="3"/>
+<text x="794" y="571" text-anchor="end" class="m"><tspan class="fn">TIM3_CH3  </tspan><tspan class="pin">PB0</tspan></text>
+<text x="1026" y="571" class="m mp">8 LED</text>
+<line x1="810" y1="614" x2="1010" y2="614" stroke="#8e5bd8" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="7 6"/>
+<text x="910.0" y="605" text-anchor="middle" class="net" style="fill:#8e5bd8">MISO</text>
+<circle cx="810" cy="614" r="5.5" fill="#fff" stroke="#8e5bd8" stroke-width="3"/>
+<circle cx="1010" cy="614" r="5.5" fill="#fff" stroke="#8e5bd8" stroke-width="3"/>
+<text x="794" y="619" text-anchor="end" class="m"><tspan class="fn">SPI1_MISO  </tspan><tspan class="pin">PA6</tspan></text>
+<text x="1026" y="619" class="m mp">9 SDO</text>
+<rect x="40" y="185" width="230" height="426" rx="12" fill="#eef1fd" stroke="#2346d6" stroke-width="2.5"/>
+<text x="155.0" y="155" text-anchor="middle" class="bt">GY-521 · MPU6050</text>
+<text x="155.0" y="173" text-anchor="middle" class="bs">accel + gyro + temp, I²C 0x68</text>
+<rect x="76" y="231" width="52" height="52" rx="6" fill="#1d232b"/>
+<line x1="102" y1="265" x2="102" y2="243" stroke="#4fc9a4" stroke-width="3" stroke-linecap="round"/>
+<line x1="102" y1="265" x2="86" y2="274" stroke="#f0a24a" stroke-width="3" stroke-linecap="round"/>
+<line x1="102" y1="265" x2="118" y2="274" stroke="#6f9dff" stroke-width="3" stroke-linecap="round"/>
+<line x1="270" y1="230" x2="470" y2="230" stroke="#d64545" stroke-width="3.5" stroke-linecap="round"/>
+<text x="370.0" y="221" text-anchor="middle" class="net" style="fill:#d64545">3.3 V</text>
+<circle cx="270" cy="230" r="5.5" fill="#fff" stroke="#d64545" stroke-width="3"/>
+<circle cx="470" cy="230" r="5.5" fill="#fff" stroke="#d64545" stroke-width="3"/>
+<text x="486" y="235" class="m"><tspan class="pin">3.3</tspan><tspan class="fn">  power</tspan></text>
+<text x="254" y="235" text-anchor="end" class="m mp">VCC 1</text>
+<line x1="270" y1="278" x2="470" y2="278" stroke="#2b2f36" stroke-width="3.5" stroke-linecap="round"/>
+<text x="370.0" y="269" text-anchor="middle" class="net" style="fill:#2b2f36">GND</text>
+<circle cx="270" cy="278" r="5.5" fill="#fff" stroke="#2b2f36" stroke-width="3"/>
+<circle cx="470" cy="278" r="5.5" fill="#fff" stroke="#2b2f36" stroke-width="3"/>
+<text x="486" y="283" class="m"><tspan class="pin">G</tspan><tspan class="fn">  ground</tspan></text>
+<text x="254" y="283" text-anchor="end" class="m mp">GND 2</text>
+<line x1="270" y1="326" x2="470" y2="326" stroke="#c99400" stroke-width="3.5" stroke-linecap="round"/>
+<text x="370.0" y="317" text-anchor="middle" class="net" style="fill:#c99400">SCL</text>
+<circle cx="270" cy="326" r="5.5" fill="#fff" stroke="#c99400" stroke-width="3"/>
+<circle cx="470" cy="326" r="5.5" fill="#fff" stroke="#c99400" stroke-width="3"/>
+<text x="486" y="331" class="m"><tspan class="pin">PB6</tspan><tspan class="fn">  I2C1_SCL</tspan></text>
+<text x="254" y="331" text-anchor="end" class="m mp">SCL 3</text>
+<line x1="270" y1="374" x2="470" y2="374" stroke="#2f6fdf" stroke-width="3.5" stroke-linecap="round"/>
+<text x="370.0" y="365" text-anchor="middle" class="net" style="fill:#2f6fdf">SDA</text>
+<circle cx="270" cy="374" r="5.5" fill="#fff" stroke="#2f6fdf" stroke-width="3"/>
+<circle cx="470" cy="374" r="5.5" fill="#fff" stroke="#2f6fdf" stroke-width="3"/>
+<text x="486" y="379" class="m"><tspan class="pin">PB7</tspan><tspan class="fn">  I2C1_SDA</tspan></text>
+<text x="254" y="379" text-anchor="end" class="m mp">SDA 4</text>
+<line x1="270" y1="422" x2="470" y2="422" stroke="#9aa1ab" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="7 6"/>
+<text x="370.0" y="413" text-anchor="middle" class="net" style="fill:#9aa1ab">XDA (unused)</text>
+<circle cx="270" cy="422" r="5.5" fill="#fff" stroke="#9aa1ab" stroke-width="3"/>
+<circle cx="470" cy="422" r="5.5" fill="#fff" stroke="#9aa1ab" stroke-width="3"/>
+<text x="486" y="427" class="m"><tspan class="pin">PB11</tspan><tspan class="fn">  input, hi-Z</tspan></text>
+<text x="254" y="427" text-anchor="end" class="m mp">XDA 5</text>
+<line x1="270" y1="470" x2="470" y2="470" stroke="#9aa1ab" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="7 6"/>
+<text x="370.0" y="461" text-anchor="middle" class="net" style="fill:#9aa1ab">XCL (unused)</text>
+<circle cx="270" cy="470" r="5.5" fill="#fff" stroke="#9aa1ab" stroke-width="3"/>
+<circle cx="470" cy="470" r="5.5" fill="#fff" stroke="#9aa1ab" stroke-width="3"/>
+<text x="486" y="475" class="m"><tspan class="pin">PB10</tspan><tspan class="fn">  input, hi-Z</tspan></text>
+<text x="254" y="475" text-anchor="end" class="m mp">XCL 6</text>
+<line x1="270" y1="518" x2="470" y2="518" stroke="#159a72" stroke-width="3.5" stroke-linecap="round"/>
+<text x="370.0" y="509" text-anchor="middle" class="net" style="fill:#159a72">AD0</text>
+<circle cx="270" cy="518" r="5.5" fill="#fff" stroke="#159a72" stroke-width="3"/>
+<circle cx="470" cy="518" r="5.5" fill="#fff" stroke="#159a72" stroke-width="3"/>
+<text x="486" y="523" class="m"><tspan class="pin">PB13</tspan><tspan class="fn">  GPIO out</tspan></text>
+<text x="254" y="523" text-anchor="end" class="m mp">AD0 7</text>
+<line x1="270" y1="566" x2="470" y2="566" stroke="#e8833a" stroke-width="3.5" stroke-linecap="round"/>
+<text x="370.0" y="557" text-anchor="middle" class="net" style="fill:#e8833a">INT</text>
+<circle cx="270" cy="566" r="5.5" fill="#fff" stroke="#e8833a" stroke-width="3"/>
+<circle cx="470" cy="566" r="5.5" fill="#fff" stroke="#e8833a" stroke-width="3"/>
+<text x="486" y="571" class="m"><tspan class="pin">PB12</tspan><tspan class="fn">  input</tspan></text>
+<text x="254" y="571" text-anchor="end" class="m mp">INT 8</text>
+<rect x="490" y="750" width="300" height="64" rx="10" fill="#f6f7f9" stroke="#5b6472" stroke-width="2"/>
+<text x="640.0" y="800" text-anchor="middle" class="bt" style="font-size:16px">ST-Link V2 (flash + live data)</text>
+<line x1="525" y1="680" x2="525" y2="750" stroke="#d64545" stroke-width="3.5" stroke-linecap="round"/>
+<circle cx="525" cy="680" r="5.5" fill="#fff" stroke="#d64545" stroke-width="3"/>
+<circle cx="525" cy="750" r="5.5" fill="#fff" stroke="#d64545" stroke-width="3"/>
+<text x="525" y="666" text-anchor="middle" class="m pin" style="font-size:13px">3.3</text>
+<text x="525" y="772" text-anchor="middle" class="m fn" style="font-weight:700;fill:#3b414b">3.3V</text>
+<line x1="601" y1="680" x2="601" y2="750" stroke="#2f6fdf" stroke-width="3.5" stroke-linecap="round"/>
+<circle cx="601" cy="680" r="5.5" fill="#fff" stroke="#2f6fdf" stroke-width="3"/>
+<circle cx="601" cy="750" r="5.5" fill="#fff" stroke="#2f6fdf" stroke-width="3"/>
+<text x="601" y="666" text-anchor="middle" class="m pin" style="font-size:13px">PA13</text>
+<text x="601" y="772" text-anchor="middle" class="m fn" style="font-weight:700;fill:#3b414b">SWDIO</text>
+<line x1="677" y1="680" x2="677" y2="750" stroke="#c99400" stroke-width="3.5" stroke-linecap="round"/>
+<circle cx="677" cy="680" r="5.5" fill="#fff" stroke="#c99400" stroke-width="3"/>
+<circle cx="677" cy="750" r="5.5" fill="#fff" stroke="#c99400" stroke-width="3"/>
+<text x="677" y="666" text-anchor="middle" class="m pin" style="font-size:13px">PA14</text>
+<text x="677" y="772" text-anchor="middle" class="m fn" style="font-weight:700;fill:#3b414b">SWCLK</text>
+<line x1="753" y1="680" x2="753" y2="750" stroke="#2b2f36" stroke-width="3.5" stroke-linecap="round"/>
+<circle cx="753" cy="680" r="5.5" fill="#fff" stroke="#2b2f36" stroke-width="3"/>
+<circle cx="753" cy="750" r="5.5" fill="#fff" stroke="#2b2f36" stroke-width="3"/>
+<text x="753" y="666" text-anchor="middle" class="m pin" style="font-size:13px">G</text>
+<text x="753" y="772" text-anchor="middle" class="m fn" style="font-weight:700;fill:#3b414b">GND</text>
+<text x="40" y="690" class="nt">DISPLAY NOTES</text>
+<text x="40" y="716" class="note">• SPI1 master, mode 0, 4 MHz (8 MHz PCLK2 ÷ 2), MSB first.</text>
+<text x="40" y="738" class="note">• CS, D/C and RESET are plain GPIO push-pull outputs.</text>
+<text x="40" y="760" class="note">• BACKLIGHT: TIM3_CH3 PWM at 20 kHz, 50 % by default.</text>
+<text x="40" y="782" class="note">• SDO (MISO) is optional: used only to read the panel ID (85 85 52).</text>
+<text x="40" y="804" class="note">• LED: most modules switch the backlight with a transistor. If yours</text>
+<text x="52" y="826" class="note">has none, connect LED to 3.3 V instead of PB0 (no dimming).</text>
+<text x="880" y="690" class="nt">POWER</text>
+<text x="880" y="716" class="note">• VCC of both modules to the Blue Pill 3.3 V pin.</text>
+<text x="880" y="738" class="note">• Roughly 70–110 mA at full backlight; the default</text>
+<text x="892" y="760" class="note">50 % PWM brightness halves the backlight share.</text>
+<text x="880" y="782" class="note">• A clone ST-Link's 3.3 V pin can usually supply</text>
+<text x="892" y="804" class="note">it; if 3.3 V sags, use USB power.</text>
+<text x="880" y="826" class="note">• All grounds are common.</text>
+</svg>

@@ -1,0 +1,14 @@
+# Blue Pill native USB for the MPU6050-and-STM32 project (Linux).
+#   sudo cp tools/udev/50-mpu6050-usb.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# 1209:0001 / 1209:0002 are pid.codes TEST PIDs (see Inc/usb_ids.h): fine for
+# your own bench, not unique. Change them here if you assign your own PIDs.
+
+# Application: USB serial (/dev/ttyACMx). Keep ModemManager from probing it
+# with AT commands, which would land in the command parser.
+ATTRS{idVendor}=="1209", ATTRS{idProduct}=="0001", ENV{ID_MM_DEVICE_IGNORE}="1"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="0001", MODE="0660", GROUP="dialout", SYMLINK+="mpu6050"
+
+# DFU bootloader: let dfu-util open it without sudo.
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="0002", MODE="0660", GROUP="plugdev", TAG+="uaccess"

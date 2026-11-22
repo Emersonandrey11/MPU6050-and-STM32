@@ -285,7 +285,7 @@ svg .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
       <text x="355" y="66" text-anchor="middle" fill="var(--muted)" font-size="12">i2c.c → mpu6050.c → main.c</text>
       <rect x="265" y="80" width="180" height="44" rx="6" fill="var(--surface)" stroke="var(--c1)" stroke-dasharray="4 3"/>
       <text x="355" y="100" text-anchor="middle" class="mono" font-size="12.5" fill="var(--text)">g_telemetry (RAM)</text>
-      <text x="355" y="116" text-anchor="middle" class="mono" font-size="11" fill="var(--muted)">0x200001C0, 248 bytes</text>
+      <text x="355" y="116" text-anchor="middle" class="mono" font-size="11" fill="var(--muted)">0x20000430, 248 bytes</text>
 
       <rect x="550" y="40" width="130" height="80" rx="10" fill="var(--c3-soft)" stroke="var(--c3)"/>
       <text x="615" y="72" text-anchor="middle" font-weight="700" fill="var(--text)">ST-Link V2</text>
@@ -338,14 +338,14 @@ svg .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
   <h3>Main numbers</h3>
   <div class="table-wrap"><table>
     <tr><th>Item</th><th>Value</th><th>Where it is set</th></tr>
-    <tr><td>CPU clock</td><td>8 MHz (internal HSI oscillator, no PLL)</td><td><code>board.h</code> <code>CORE_CLOCK_HZ</code></td></tr>
+    <tr><td>CPU clock</td><td>48 MHz (8 MHz crystal × 6 with the PLL; USB needs exactly 48 MHz)</td><td><code>board.h</code> <code>CORE_CLOCK_HZ</code></td></tr>
     <tr><td>I²C speed</td><td>100 kHz (standard mode)</td><td><code>i2c.c</code> <code>I2C_SPEED_HZ</code></td></tr>
     <tr><td>Sample rate</td><td>1 kHz / (1 + 9) = 100 Hz</td><td><code>main.c</code> <code>s_mpu.smplrt_div = 9</code></td></tr>
     <tr><td>Accel range</td><td>±2 g → 16384 counts per g</td><td><code>s_mpu.accel_fs = 0</code></td></tr>
     <tr><td>Gyro range</td><td>±250 °/s → 131 counts per °/s</td><td><code>s_mpu.gyro_fs = 0</code></td></tr>
     <tr><td>Digital low-pass filter</td><td>DLPF 3: 44 Hz accel / 42 Hz gyro</td><td><code>s_mpu.dlpf = 3</code></td></tr>
-    <tr><td>Flash used</td><td>≈ 6.4 KB of 64 KB</td><td>from the last Debug build (<code>-O0</code>)</td></tr>
-    <tr><td>RAM used</td><td>≈ 0.9 KB of 20 KB (+1.5 KB reserved for heap/stack check)</td><td>from <code>build/Debug/mpu6050.elf</code></td></tr>
+    <tr><td>Flash used</td><td>application ≈ 28.9 KB of its 56 KB (≈ 6.4 KB without the TFT and USB code), bootloader ≈ 4 KB of 8 KB</td><td>from the last Debug build (<code>-O0</code>)</td></tr>
+    <tr><td>RAM used</td><td>≈ 3.7 KB of 20 KB (+1.5 KB reserved for heap/stack check)</td><td>from <code>build/Debug/mpu6050.elf</code></td></tr>
   </table></div>
 </section>
 
@@ -369,6 +369,65 @@ svg .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
     <tr><td>VCC / GND</td><td>3.3 V / GND</td><td></td><td></td><td>Power</td></tr>
   </table></div>
   <p>Debugger: <b>ST-Link V2</b> on SWDIO (PA13), SWCLK (PA14), GND and 3.3 V. The project does not use NRST.</p>
+
+  <h3>Optional: 2.8″ ST7789V TFT display</h3>
+  <p>A 240 × 320 SPI display shows the same data the PC sees. The firmware runs the same way with or without it.
+  Its three data lines go to the pins of the <b>SPI1</b> peripheral (no remap); the four control lines are ordinary GPIO outputs.</p>
+  <div class="table-wrap"><table>
+    <tr><th>TFT pin</th><th>STM32 pin</th><th>Direction</th><th>STM32 mode</th><th>Purpose</th></tr>
+    <tr><td>SCK</td><td>PA5</td><td>MCU → display</td><td>Alternate function, push-pull</td><td>SPI1 clock, 12 MHz (48 MHz PCLK2 ÷ 4), mode 0</td></tr>
+    <tr><td>SDI (MOSI)</td><td>PA7</td><td>MCU → display</td><td>Alternate function, push-pull</td><td>SPI1 data out: commands and pixels</td></tr>
+    <tr><td>SDO (MISO)</td><td>PA6</td><td>display → MCU</td><td>Input with pull-down</td><td>Optional: only used to read the panel ID (85 85 52)</td></tr>
+    <tr><td>CS</td><td>PA4</td><td>MCU → display</td><td>Push-pull output</td><td>Chip select, active low (the SPI's own NSS is disabled: SSM = SSI = 1)</td></tr>
+    <tr><td>DC</td><td>PA3</td><td>MCU → display</td><td>Push-pull output</td><td>Low = command byte, high = parameters / pixel data</td></tr>
+    <tr><td>RESET</td><td>PA2</td><td>MCU → display</td><td>Push-pull output</td><td>Hardware reset, active low</td></tr>
+    <tr><td>LED</td><td>PB0</td><td>MCU → display</td><td>Alternate function, push-pull</td><td>Backlight brightness: TIM3_CH3 PWM at 20 kHz, set by <code>LCD_BRIGHTNESS</code> in <code>board.h</code> (default 50 %)</td></tr>
+    <tr><td>VCC / GND</td><td>3.3 V / GND</td><td></td><td></td><td>Power; the backlight draws about 50–80 mA at 100 %, about half that at the default 50 %</td></tr>
+  </table></div>
+  <figure>
+    <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjgwIDg2MCIgd2lkdGg9IjEyODAiIGhlaWdodD0iODYwIiByb2xlPSJpbWciIGFyaWEtbGFiZWxsZWRieT0idCBkIj4KPHRpdGxlIGlkPSJ0Ij5XaXJpbmc6IE1QVTYwNTAgKEdZLTUyMSkgYW5kIDIuOCBpbmNoIFNUNzc4OVYgVEZUIG9uIGFuIFNUTTMyRjEwMyBCbHVlIFBpbGw8L3RpdGxlPgo8ZGVzYyBpZD0iZCI+VEZUIG9uIFNQSTE6IFNDSyBQQTUsIFNESSBQQTcsIFNETyBQQTYsIENTIFBBNCwgREMgUEEzLCBSRVNFVCBQQTIsIExFRCBQQjAsIFZDQyAzLjMgViwgR05ELiBNUFU2MDUwIG9uIEkyQzE6IFNDTCBQQjYsIFNEQSBQQjcsIElOVCBQQjEyLCBBRDAgUEIxMywgWENMIFBCMTAsIFhEQSBQQjExLiBTVC1MaW5rIG9uIFBBMTMvUEExNC48L2Rlc2M+CjxzdHlsZT4KdGV4dHtmb250LWZhbWlseTpJbnRlciwiU2Vnb2UgVUkiLEhlbHZldGljYSxBcmlhbCxzYW5zLXNlcmlmO2ZpbGw6IzFkMjMyYn0KLm17Zm9udC1mYW1pbHk6IkpldEJyYWlucyBNb25vIixDb25zb2xhcywiRGVqYVZ1IFNhbnMgTW9ubyIsbW9ub3NwYWNlfQouaHtmb250LXNpemU6MjZweDtmb250LXdlaWdodDo4MDB9LnN7Zm9udC1zaXplOjE1cHg7ZmlsbDojNWI2NDcyfQouYnR7Zm9udC1zaXplOjE5cHg7Zm9udC13ZWlnaHQ6ODAwfS5ic3tmb250LXNpemU6MTNweDtmaWxsOiM1YjY0NzJ9Ci5waW57Zm9udC1zaXplOjE1cHg7Zm9udC13ZWlnaHQ6NzAwfS5mbntmb250LXNpemU6MTJweDtmaWxsOiM2YjcyODB9Ci5uZXR7Zm9udC1zaXplOjEycHg7Zm9udC13ZWlnaHQ6NzAwfS5tcHtmb250LXNpemU6MTVweDtmb250LXdlaWdodDo3MDB9Ci5ub3Rle2ZvbnQtc2l6ZToxNHB4O2ZpbGw6IzNiNDE0Yn0ubnR7Zm9udC1zaXplOjEzcHg7Zm9udC13ZWlnaHQ6ODAwO2xldHRlci1zcGFjaW5nOjEuNXB4O2ZpbGw6IzViNjQ3Mn0KPC9zdHlsZT4KPHJlY3Qgd2lkdGg9IjEyODAiIGhlaWdodD0iODYwIiBmaWxsPSIjZmZmZmZmIi8+Cjx0ZXh0IHg9IjQwIiB5PSI1MiIgY2xhc3M9ImgiPkJsdWUgUGlsbCArIE1QVTYwNTAgKyAyLjjigLMgU1Q3Nzg5ViBURlQ8L3RleHQ+Cjx0ZXh0IHg9IjQwIiB5PSI4MCIgY2xhc3M9InMiPkRpc3BsYXkgb24gU1BJMSAobm8gcmVtYXApLCBzZW5zb3Igb24gScKyQzEsIGRlYnVnZ2VyIG9uIFNXRC4gV2lyZSBjb2xvdXJzIGFyZSBvbmx5IGZvciByZWFkaW5nIHRoZSBkaWFncmFtLjwvdGV4dD4KPHJlY3QgeD0iNDcwIiB5PSIxMjAiIHdpZHRoPSIzNDAiIGhlaWdodD0iNTYwIiByeD0iMTQiIGZpbGw9IiNlZWYzZmIiIHN0cm9rZT0iIzFmNGY4ZiIgc3Ryb2tlLXdpZHRoPSIyLjUiLz4KPHJlY3QgeD0iNTg1LjAiIHk9IjE4MiIgd2lkdGg9IjExMCIgaGVpZ2h0PSI1NiIgcng9IjYiIGZpbGw9IiMxZDIzMmIiLz4KPHRleHQgeD0iNjQwLjAiIHk9IjIxNSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im0iIHN0eWxlPSJmb250LXNpemU6MTFweDtmaWxsOiNjZmQ2ZTAiPlNUTTMyRjEwMzwvdGV4dD4KPHRleHQgeD0iNjQwLjAiIHk9IjE2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9ImJ0Ij5TVE0zMkYxMDNDOFQ2IOKAnEJsdWUgUGlsbOKAnTwvdGV4dD4KPHRleHQgeD0iNjQwLjAiIHk9IjI2MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9ImJzIj44IE1IeiBIU0kgwrcgMy4zIFYgbG9naWM8L3RleHQ+CjxyZWN0IHg9IjEwMTAiIHk9IjE4NSIgd2lkdGg9IjIzMCIgaGVpZ2h0PSI0NzQiIHJ4PSIxMiIgZmlsbD0iI2Y0ZjFmYiIgc3Ryb2tlPSIjNWIzZmE4IiBzdHJva2Utd2lkdGg9IjIuNSIvPgo8dGV4dCB4PSIxMTI1LjAiIHk9IjE1NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9ImJ0Ij4yLjjigLMgVEZUIMK3IFNUNzc4OVY8L3RleHQ+Cjx0ZXh0IHg9IjExMjUuMCIgeT0iMTczIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0iYnMiPjI0MCDDlyAzMjAsIFJHQjU2NSwgNC13aXJlIFNQSTwvdGV4dD4KPHJlY3QgeD0iMTEyMCIgeT0iMjI1IiB3aWR0aD0iOTYiIGhlaWdodD0iMTI4IiByeD0iNCIgZmlsbD0iIzBhMTIyMCIgc3Ryb2tlPSIjMWQyMzJiIiBzdHJva2Utd2lkdGg9IjIiLz4KPHJlY3QgeD0iMTEyMCIgeT0iMjI1IiB3aWR0aD0iOTYiIGhlaWdodD0iMTIiIHJ4PSIzIiBmaWxsPSIjMTYyOTRhIi8+CjxyZWN0IHg9IjExMjgiIHk9IjI0NyIgd2lkdGg9IjIyIiBoZWlnaHQ9IjciIHJ4PSIyIiBmaWxsPSIjZjBhMjRhIi8+CjxyZWN0IHg9IjExMjgiIHk9IjI2NSIgd2lkdGg9IjIyIiBoZWlnaHQ9IjciIHJ4PSIyIiBmaWxsPSIjZjBhMjRhIiBvcGFjaXR5PSIuNzUiLz4KPHJlY3QgeD0iMTE1NiIgeT0iMjQ3IiB3aWR0aD0iMjIiIGhlaWdodD0iNyIgcng9IjIiIGZpbGw9IiM2ZjlkZmYiLz4KPHJlY3QgeD0iMTE1NiIgeT0iMjY1IiB3aWR0aD0iMjIiIGhlaWdodD0iNyIgcng9IjIiIGZpbGw9IiM2ZjlkZmYiIG9wYWNpdHk9Ii43NSIvPgo8cmVjdCB4PSIxMTg0IiB5PSIyNDciIHdpZHRoPSIyMiIgaGVpZ2h0PSI3IiByeD0iMiIgZmlsbD0iIzRmYzlhNCIvPgo8cmVjdCB4PSIxMTg0IiB5PSIyNjUiIHdpZHRoPSIyMiIgaGVpZ2h0PSI3IiByeD0iMiIgZmlsbD0iIzRmYzlhNCIgb3BhY2l0eT0iLjc1Ii8+Cjxwb2x5bGluZSBwb2ludHM9IjExMjYsMzMwIDExNDAsMzIzIDExNTQsMzMzIDExNjgsMzE3IDExODIsMzI3IDExOTYsMzIxIDEyMTAsMzI5IiBmaWxsPSJub25lIiBzdHJva2U9IiM0ZmM5YTQiIHN0cm9rZS13aWR0aD0iMiIvPgo8cG9seWxpbmUgcG9pbnRzPSIxMTI2LDMxMCAxMTQwLDMxMyAxMTU0LDMwNSAxMTY4LDMxMSAxMTgyLDMwNyAxMTk2LDMxNSAxMjEwLDMwOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjZjBhMjRhIiBzdHJva2Utd2lkdGg9IjIiLz4KPGxpbmUgeDE9IjgxMCIgeTE9IjIzMCIgeDI9IjEwMTAiIHkyPSIyMzAiIHN0cm9rZT0iI2Q2NDU0NSIgc3Ryb2tlLXdpZHRoPSIzLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8dGV4dCB4PSI5MTAuMCIgeT0iMjIxIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0ibmV0IiBzdHlsZT0iZmlsbDojZDY0NTQ1Ij4zLjMgVjwvdGV4dD4KPGNpcmNsZSBjeD0iODEwIiBjeT0iMjMwIiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2Q2NDU0NSIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9IjEwMTAiIGN5PSIyMzAiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjZDY0NTQ1IiBzdHJva2Utd2lkdGg9IjMiLz4KPHRleHQgeD0iNzk0IiB5PSIyMzUiIHRleHQtYW5jaG9yPSJlbmQiIGNsYXNzPSJtIj48dHNwYW4gY2xhc3M9ImZuIj5wb3dlciAgPC90c3Bhbj48dHNwYW4gY2xhc3M9InBpbiI+My4zPC90c3Bhbj48L3RleHQ+Cjx0ZXh0IHg9IjEwMjYiIHk9IjIzNSIgY2xhc3M9Im0gbXAiPjEgVkNDPC90ZXh0Pgo8bGluZSB4MT0iODEwIiB5MT0iMjc4IiB4Mj0iMTAxMCIgeTI9IjI3OCIgc3Ryb2tlPSIjMmIyZjM2IiBzdHJva2Utd2lkdGg9IjMuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjx0ZXh0IHg9IjkxMC4wIiB5PSIyNjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGNsYXNzPSJuZXQiIHN0eWxlPSJmaWxsOiMyYjJmMzYiPkdORDwvdGV4dD4KPGNpcmNsZSBjeD0iODEwIiBjeT0iMjc4IiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzJiMmYzNiIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9IjEwMTAiIGN5PSIyNzgiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMmIyZjM2IiBzdHJva2Utd2lkdGg9IjMiLz4KPHRleHQgeD0iNzk0IiB5PSIyODMiIHRleHQtYW5jaG9yPSJlbmQiIGNsYXNzPSJtIj48dHNwYW4gY2xhc3M9ImZuIj5ncm91bmQgIDwvdHNwYW4+PHRzcGFuIGNsYXNzPSJwaW4iPkc8L3RzcGFuPjwvdGV4dD4KPHRleHQgeD0iMTAyNiIgeT0iMjgzIiBjbGFzcz0ibSBtcCI+MiBHTkQ8L3RleHQ+CjxsaW5lIHgxPSI4MTAiIHkxPSIzMjYiIHgyPSIxMDEwIiB5Mj0iMzI2IiBzdHJva2U9IiNlODgzM2EiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPHRleHQgeD0iOTEwLjAiIHk9IjMxNyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im5ldCIgc3R5bGU9ImZpbGw6I2U4ODMzYSI+Q1M8L3RleHQ+CjxjaXJjbGUgY3g9IjgxMCIgY3k9IjMyNiIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiNlODgzM2EiIHN0cm9rZS13aWR0aD0iMyIvPgo8Y2lyY2xlIGN4PSIxMDEwIiBjeT0iMzI2IiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2U4ODMzYSIgc3Ryb2tlLXdpZHRoPSIzIi8+Cjx0ZXh0IHg9Ijc5NCIgeT0iMzMxIiB0ZXh0LWFuY2hvcj0iZW5kIiBjbGFzcz0ibSI+PHRzcGFuIGNsYXNzPSJmbiI+R1BJTyBvdXQgIDwvdHNwYW4+PHRzcGFuIGNsYXNzPSJwaW4iPlBBNDwvdHNwYW4+PC90ZXh0Pgo8dGV4dCB4PSIxMDI2IiB5PSIzMzEiIGNsYXNzPSJtIG1wIj4zIENTPC90ZXh0Pgo8bGluZSB4MT0iODEwIiB5MT0iMzc0IiB4Mj0iMTAxMCIgeTI9IjM3NCIgc3Ryb2tlPSIjYzI0MDhhIiBzdHJva2Utd2lkdGg9IjMuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjx0ZXh0IHg9IjkxMC4wIiB5PSIzNjUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGNsYXNzPSJuZXQiIHN0eWxlPSJmaWxsOiNjMjQwOGEiPlJFU0VUPC90ZXh0Pgo8Y2lyY2xlIGN4PSI4MTAiIGN5PSIzNzQiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjYzI0MDhhIiBzdHJva2Utd2lkdGg9IjMiLz4KPGNpcmNsZSBjeD0iMTAxMCIgY3k9IjM3NCIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiNjMjQwOGEiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI3OTQiIHk9IjM3OSIgdGV4dC1hbmNob3I9ImVuZCIgY2xhc3M9Im0iPjx0c3BhbiBjbGFzcz0iZm4iPkdQSU8gb3V0ICA8L3RzcGFuPjx0c3BhbiBjbGFzcz0icGluIj5QQTI8L3RzcGFuPjwvdGV4dD4KPHRleHQgeD0iMTAyNiIgeT0iMzc5IiBjbGFzcz0ibSBtcCI+NCBSRVNFVDwvdGV4dD4KPGxpbmUgeDE9IjgxMCIgeTE9IjQyMiIgeDI9IjEwMTAiIHkyPSI0MjIiIHN0cm9rZT0iIzE1OWE3MiIgc3Ryb2tlLXdpZHRoPSIzLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8dGV4dCB4PSI5MTAuMCIgeT0iNDEzIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0ibmV0IiBzdHlsZT0iZmlsbDojMTU5YTcyIj5EL0M8L3RleHQ+CjxjaXJjbGUgY3g9IjgxMCIgY3k9IjQyMiIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiMxNTlhNzIiIHN0cm9rZS13aWR0aD0iMyIvPgo8Y2lyY2xlIGN4PSIxMDEwIiBjeT0iNDIyIiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzE1OWE3MiIgc3Ryb2tlLXdpZHRoPSIzIi8+Cjx0ZXh0IHg9Ijc5NCIgeT0iNDI3IiB0ZXh0LWFuY2hvcj0iZW5kIiBjbGFzcz0ibSI+PHRzcGFuIGNsYXNzPSJmbiI+R1BJTyBvdXQgIDwvdHNwYW4+PHRzcGFuIGNsYXNzPSJwaW4iPlBBMzwvdHNwYW4+PC90ZXh0Pgo8dGV4dCB4PSIxMDI2IiB5PSI0MjciIGNsYXNzPSJtIG1wIj41IERDPC90ZXh0Pgo8bGluZSB4MT0iODEwIiB5MT0iNDcwIiB4Mj0iMTAxMCIgeTI9IjQ3MCIgc3Ryb2tlPSIjMmY2ZmRmIiBzdHJva2Utd2lkdGg9IjMuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjx0ZXh0IHg9IjkxMC4wIiB5PSI0NjEiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGNsYXNzPSJuZXQiIHN0eWxlPSJmaWxsOiMyZjZmZGYiPk1PU0k8L3RleHQ+CjxjaXJjbGUgY3g9IjgxMCIgY3k9IjQ3MCIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiMyZjZmZGYiIHN0cm9rZS13aWR0aD0iMyIvPgo8Y2lyY2xlIGN4PSIxMDEwIiBjeT0iNDcwIiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzJmNmZkZiIgc3Ryb2tlLXdpZHRoPSIzIi8+Cjx0ZXh0IHg9Ijc5NCIgeT0iNDc1IiB0ZXh0LWFuY2hvcj0iZW5kIiBjbGFzcz0ibSI+PHRzcGFuIGNsYXNzPSJmbiI+U1BJMV9NT1NJICA8L3RzcGFuPjx0c3BhbiBjbGFzcz0icGluIj5QQTc8L3RzcGFuPjwvdGV4dD4KPHRleHQgeD0iMTAyNiIgeT0iNDc1IiBjbGFzcz0ibSBtcCI+NiBTREk8L3RleHQ+CjxsaW5lIHgxPSI4MTAiIHkxPSI1MTgiIHgyPSIxMDEwIiB5Mj0iNTE4IiBzdHJva2U9IiNjOTk0MDAiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPHRleHQgeD0iOTEwLjAiIHk9IjUwOSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im5ldCIgc3R5bGU9ImZpbGw6I2M5OTQwMCI+U0NLPC90ZXh0Pgo8Y2lyY2xlIGN4PSI4MTAiIGN5PSI1MTgiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjYzk5NDAwIiBzdHJva2Utd2lkdGg9IjMiLz4KPGNpcmNsZSBjeD0iMTAxMCIgY3k9IjUxOCIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiNjOTk0MDAiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI3OTQiIHk9IjUyMyIgdGV4dC1hbmNob3I9ImVuZCIgY2xhc3M9Im0iPjx0c3BhbiBjbGFzcz0iZm4iPlNQSTFfU0NLICA8L3RzcGFuPjx0c3BhbiBjbGFzcz0icGluIj5QQTU8L3RzcGFuPjwvdGV4dD4KPHRleHQgeD0iMTAyNiIgeT0iNTIzIiBjbGFzcz0ibSBtcCI+NyBTQ0s8L3RleHQ+CjxsaW5lIHgxPSI4MTAiIHkxPSI1NjYiIHgyPSIxMDEwIiB5Mj0iNTY2IiBzdHJva2U9IiMzYTlhM2EiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPHRleHQgeD0iOTEwLjAiIHk9IjU1NyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im5ldCIgc3R5bGU9ImZpbGw6IzNhOWEzYSI+QkFDS0xJR0hUIFBXTTwvdGV4dD4KPGNpcmNsZSBjeD0iODEwIiBjeT0iNTY2IiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzNhOWEzYSIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9IjEwMTAiIGN5PSI1NjYiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjM2E5YTNhIiBzdHJva2Utd2lkdGg9IjMiLz4KPHRleHQgeD0iNzk0IiB5PSI1NzEiIHRleHQtYW5jaG9yPSJlbmQiIGNsYXNzPSJtIj48dHNwYW4gY2xhc3M9ImZuIj5USU0zX0NIMyAgPC90c3Bhbj48dHNwYW4gY2xhc3M9InBpbiI+UEIwPC90c3Bhbj48L3RleHQ+Cjx0ZXh0IHg9IjEwMjYiIHk9IjU3MSIgY2xhc3M9Im0gbXAiPjggTEVEPC90ZXh0Pgo8bGluZSB4MT0iODEwIiB5MT0iNjE0IiB4Mj0iMTAxMCIgeTI9IjYxNCIgc3Ryb2tlPSIjOGU1YmQ4IiBzdHJva2Utd2lkdGg9IjMuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtZGFzaGFycmF5PSI3IDYiLz4KPHRleHQgeD0iOTEwLjAiIHk9IjYwNSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im5ldCIgc3R5bGU9ImZpbGw6IzhlNWJkOCI+TUlTTzwvdGV4dD4KPGNpcmNsZSBjeD0iODEwIiBjeT0iNjE0IiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzhlNWJkOCIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9IjEwMTAiIGN5PSI2MTQiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjOGU1YmQ4IiBzdHJva2Utd2lkdGg9IjMiLz4KPHRleHQgeD0iNzk0IiB5PSI2MTkiIHRleHQtYW5jaG9yPSJlbmQiIGNsYXNzPSJtIj48dHNwYW4gY2xhc3M9ImZuIj5TUEkxX01JU08gIDwvdHNwYW4+PHRzcGFuIGNsYXNzPSJwaW4iPlBBNjwvdHNwYW4+PC90ZXh0Pgo8dGV4dCB4PSIxMDI2IiB5PSI2MTkiIGNsYXNzPSJtIG1wIj45IFNETzwvdGV4dD4KPHJlY3QgeD0iNDAiIHk9IjE4NSIgd2lkdGg9IjIzMCIgaGVpZ2h0PSI0MjYiIHJ4PSIxMiIgZmlsbD0iI2VlZjFmZCIgc3Ryb2tlPSIjMjM0NmQ2IiBzdHJva2Utd2lkdGg9IjIuNSIvPgo8dGV4dCB4PSIxNTUuMCIgeT0iMTU1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0iYnQiPkdZLTUyMSDCtyBNUFU2MDUwPC90ZXh0Pgo8dGV4dCB4PSIxNTUuMCIgeT0iMTczIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0iYnMiPmFjY2VsICsgZ3lybyArIHRlbXAsIEnCskMgMHg2ODwvdGV4dD4KPHJlY3QgeD0iNzYiIHk9IjIzMSIgd2lkdGg9IjUyIiBoZWlnaHQ9IjUyIiByeD0iNiIgZmlsbD0iIzFkMjMyYiIvPgo8bGluZSB4MT0iMTAyIiB5MT0iMjY1IiB4Mj0iMTAyIiB5Mj0iMjQzIiBzdHJva2U9IiM0ZmM5YTQiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxsaW5lIHgxPSIxMDIiIHkxPSIyNjUiIHgyPSI4NiIgeTI9IjI3NCIgc3Ryb2tlPSIjZjBhMjRhIiBzdHJva2Utd2lkdGg9IjMiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8bGluZSB4MT0iMTAyIiB5MT0iMjY1IiB4Mj0iMTE4IiB5Mj0iMjc0IiBzdHJva2U9IiM2ZjlkZmYiIHN0cm9rZS13aWR0aD0iMyIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CjxsaW5lIHgxPSIyNzAiIHkxPSIyMzAiIHgyPSI0NzAiIHkyPSIyMzAiIHN0cm9rZT0iI2Q2NDU0NSIgc3Ryb2tlLXdpZHRoPSIzLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8dGV4dCB4PSIzNzAuMCIgeT0iMjIxIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0ibmV0IiBzdHlsZT0iZmlsbDojZDY0NTQ1Ij4zLjMgVjwvdGV4dD4KPGNpcmNsZSBjeD0iMjcwIiBjeT0iMjMwIiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2Q2NDU0NSIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9IjQ3MCIgY3k9IjIzMCIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiNkNjQ1NDUiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI0ODYiIHk9IjIzNSIgY2xhc3M9Im0iPjx0c3BhbiBjbGFzcz0icGluIj4zLjM8L3RzcGFuPjx0c3BhbiBjbGFzcz0iZm4iPiAgcG93ZXI8L3RzcGFuPjwvdGV4dD4KPHRleHQgeD0iMjU0IiB5PSIyMzUiIHRleHQtYW5jaG9yPSJlbmQiIGNsYXNzPSJtIG1wIj5WQ0MgMTwvdGV4dD4KPGxpbmUgeDE9IjI3MCIgeTE9IjI3OCIgeDI9IjQ3MCIgeTI9IjI3OCIgc3Ryb2tlPSIjMmIyZjM2IiBzdHJva2Utd2lkdGg9IjMuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjx0ZXh0IHg9IjM3MC4wIiB5PSIyNjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGNsYXNzPSJuZXQiIHN0eWxlPSJmaWxsOiMyYjJmMzYiPkdORDwvdGV4dD4KPGNpcmNsZSBjeD0iMjcwIiBjeT0iMjc4IiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzJiMmYzNiIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9IjQ3MCIgY3k9IjI3OCIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiMyYjJmMzYiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI0ODYiIHk9IjI4MyIgY2xhc3M9Im0iPjx0c3BhbiBjbGFzcz0icGluIj5HPC90c3Bhbj48dHNwYW4gY2xhc3M9ImZuIj4gIGdyb3VuZDwvdHNwYW4+PC90ZXh0Pgo8dGV4dCB4PSIyNTQiIHk9IjI4MyIgdGV4dC1hbmNob3I9ImVuZCIgY2xhc3M9Im0gbXAiPkdORCAyPC90ZXh0Pgo8bGluZSB4MT0iMjcwIiB5MT0iMzI2IiB4Mj0iNDcwIiB5Mj0iMzI2IiBzdHJva2U9IiNjOTk0MDAiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPHRleHQgeD0iMzcwLjAiIHk9IjMxNyIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im5ldCIgc3R5bGU9ImZpbGw6I2M5OTQwMCI+U0NMPC90ZXh0Pgo8Y2lyY2xlIGN4PSIyNzAiIGN5PSIzMjYiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjYzk5NDAwIiBzdHJva2Utd2lkdGg9IjMiLz4KPGNpcmNsZSBjeD0iNDcwIiBjeT0iMzI2IiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2M5OTQwMCIgc3Ryb2tlLXdpZHRoPSIzIi8+Cjx0ZXh0IHg9IjQ4NiIgeT0iMzMxIiBjbGFzcz0ibSI+PHRzcGFuIGNsYXNzPSJwaW4iPlBCNjwvdHNwYW4+PHRzcGFuIGNsYXNzPSJmbiI+ICBJMkMxX1NDTDwvdHNwYW4+PC90ZXh0Pgo8dGV4dCB4PSIyNTQiIHk9IjMzMSIgdGV4dC1hbmNob3I9ImVuZCIgY2xhc3M9Im0gbXAiPlNDTCAzPC90ZXh0Pgo8bGluZSB4MT0iMjcwIiB5MT0iMzc0IiB4Mj0iNDcwIiB5Mj0iMzc0IiBzdHJva2U9IiMyZjZmZGYiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPHRleHQgeD0iMzcwLjAiIHk9IjM2NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im5ldCIgc3R5bGU9ImZpbGw6IzJmNmZkZiI+U0RBPC90ZXh0Pgo8Y2lyY2xlIGN4PSIyNzAiIGN5PSIzNzQiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMmY2ZmRmIiBzdHJva2Utd2lkdGg9IjMiLz4KPGNpcmNsZSBjeD0iNDcwIiBjeT0iMzc0IiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzJmNmZkZiIgc3Ryb2tlLXdpZHRoPSIzIi8+Cjx0ZXh0IHg9IjQ4NiIgeT0iMzc5IiBjbGFzcz0ibSI+PHRzcGFuIGNsYXNzPSJwaW4iPlBCNzwvdHNwYW4+PHRzcGFuIGNsYXNzPSJmbiI+ICBJMkMxX1NEQTwvdHNwYW4+PC90ZXh0Pgo8dGV4dCB4PSIyNTQiIHk9IjM3OSIgdGV4dC1hbmNob3I9ImVuZCIgY2xhc3M9Im0gbXAiPlNEQSA0PC90ZXh0Pgo8bGluZSB4MT0iMjcwIiB5MT0iNDIyIiB4Mj0iNDcwIiB5Mj0iNDIyIiBzdHJva2U9IiM5YWExYWIiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1kYXNoYXJyYXk9IjcgNiIvPgo8dGV4dCB4PSIzNzAuMCIgeT0iNDEzIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0ibmV0IiBzdHlsZT0iZmlsbDojOWFhMWFiIj5YREEgKHVudXNlZCk8L3RleHQ+CjxjaXJjbGUgY3g9IjI3MCIgY3k9IjQyMiIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiM5YWExYWIiIHN0cm9rZS13aWR0aD0iMyIvPgo8Y2lyY2xlIGN4PSI0NzAiIGN5PSI0MjIiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjOWFhMWFiIiBzdHJva2Utd2lkdGg9IjMiLz4KPHRleHQgeD0iNDg2IiB5PSI0MjciIGNsYXNzPSJtIj48dHNwYW4gY2xhc3M9InBpbiI+UEIxMTwvdHNwYW4+PHRzcGFuIGNsYXNzPSJmbiI+ICBpbnB1dCwgaGktWjwvdHNwYW4+PC90ZXh0Pgo8dGV4dCB4PSIyNTQiIHk9IjQyNyIgdGV4dC1hbmNob3I9ImVuZCIgY2xhc3M9Im0gbXAiPlhEQSA1PC90ZXh0Pgo8bGluZSB4MT0iMjcwIiB5MT0iNDcwIiB4Mj0iNDcwIiB5Mj0iNDcwIiBzdHJva2U9IiM5YWExYWIiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1kYXNoYXJyYXk9IjcgNiIvPgo8dGV4dCB4PSIzNzAuMCIgeT0iNDYxIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0ibmV0IiBzdHlsZT0iZmlsbDojOWFhMWFiIj5YQ0wgKHVudXNlZCk8L3RleHQ+CjxjaXJjbGUgY3g9IjI3MCIgY3k9IjQ3MCIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiM5YWExYWIiIHN0cm9rZS13aWR0aD0iMyIvPgo8Y2lyY2xlIGN4PSI0NzAiIGN5PSI0NzAiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjOWFhMWFiIiBzdHJva2Utd2lkdGg9IjMiLz4KPHRleHQgeD0iNDg2IiB5PSI0NzUiIGNsYXNzPSJtIj48dHNwYW4gY2xhc3M9InBpbiI+UEIxMDwvdHNwYW4+PHRzcGFuIGNsYXNzPSJmbiI+ICBpbnB1dCwgaGktWjwvdHNwYW4+PC90ZXh0Pgo8dGV4dCB4PSIyNTQiIHk9IjQ3NSIgdGV4dC1hbmNob3I9ImVuZCIgY2xhc3M9Im0gbXAiPlhDTCA2PC90ZXh0Pgo8bGluZSB4MT0iMjcwIiB5MT0iNTE4IiB4Mj0iNDcwIiB5Mj0iNTE4IiBzdHJva2U9IiMxNTlhNzIiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPHRleHQgeD0iMzcwLjAiIHk9IjUwOSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im5ldCIgc3R5bGU9ImZpbGw6IzE1OWE3MiI+QUQwPC90ZXh0Pgo8Y2lyY2xlIGN4PSIyNzAiIGN5PSI1MTgiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjMTU5YTcyIiBzdHJva2Utd2lkdGg9IjMiLz4KPGNpcmNsZSBjeD0iNDcwIiBjeT0iNTE4IiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzE1OWE3MiIgc3Ryb2tlLXdpZHRoPSIzIi8+Cjx0ZXh0IHg9IjQ4NiIgeT0iNTIzIiBjbGFzcz0ibSI+PHRzcGFuIGNsYXNzPSJwaW4iPlBCMTM8L3RzcGFuPjx0c3BhbiBjbGFzcz0iZm4iPiAgR1BJTyBvdXQ8L3RzcGFuPjwvdGV4dD4KPHRleHQgeD0iMjU0IiB5PSI1MjMiIHRleHQtYW5jaG9yPSJlbmQiIGNsYXNzPSJtIG1wIj5BRDAgNzwvdGV4dD4KPGxpbmUgeDE9IjI3MCIgeTE9IjU2NiIgeDI9IjQ3MCIgeTI9IjU2NiIgc3Ryb2tlPSIjZTg4MzNhIiBzdHJva2Utd2lkdGg9IjMuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+Cjx0ZXh0IHg9IjM3MC4wIiB5PSI1NTciIHRleHQtYW5jaG9yPSJtaWRkbGUiIGNsYXNzPSJuZXQiIHN0eWxlPSJmaWxsOiNlODgzM2EiPklOVDwvdGV4dD4KPGNpcmNsZSBjeD0iMjcwIiBjeT0iNTY2IiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2U4ODMzYSIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9IjQ3MCIgY3k9IjU2NiIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiNlODgzM2EiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI0ODYiIHk9IjU3MSIgY2xhc3M9Im0iPjx0c3BhbiBjbGFzcz0icGluIj5QQjEyPC90c3Bhbj48dHNwYW4gY2xhc3M9ImZuIj4gIGlucHV0PC90c3Bhbj48L3RleHQ+Cjx0ZXh0IHg9IjI1NCIgeT0iNTcxIiB0ZXh0LWFuY2hvcj0iZW5kIiBjbGFzcz0ibSBtcCI+SU5UIDg8L3RleHQ+CjxyZWN0IHg9IjQ5MCIgeT0iNzUwIiB3aWR0aD0iMzAwIiBoZWlnaHQ9IjY0IiByeD0iMTAiIGZpbGw9IiNmNmY3ZjkiIHN0cm9rZT0iIzViNjQ3MiIgc3Ryb2tlLXdpZHRoPSIyIi8+Cjx0ZXh0IHg9IjY0MC4wIiB5PSI4MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGNsYXNzPSJidCIgc3R5bGU9ImZvbnQtc2l6ZToxNnB4Ij5TVC1MaW5rIFYyIChmbGFzaCArIGxpdmUgZGF0YSk8L3RleHQ+CjxsaW5lIHgxPSI1MjUiIHkxPSI2ODAiIHgyPSI1MjUiIHkyPSI3NTAiIHN0cm9rZT0iI2Q2NDU0NSIgc3Ryb2tlLXdpZHRoPSIzLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8Y2lyY2xlIGN4PSI1MjUiIGN5PSI2ODAiIHI9IjUuNSIgZmlsbD0iI2ZmZiIgc3Ryb2tlPSIjZDY0NTQ1IiBzdHJva2Utd2lkdGg9IjMiLz4KPGNpcmNsZSBjeD0iNTI1IiBjeT0iNzUwIiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2Q2NDU0NSIgc3Ryb2tlLXdpZHRoPSIzIi8+Cjx0ZXh0IHg9IjUyNSIgeT0iNjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0ibSBwaW4iIHN0eWxlPSJmb250LXNpemU6MTNweCI+My4zPC90ZXh0Pgo8dGV4dCB4PSI1MjUiIHk9Ijc3MiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im0gZm4iIHN0eWxlPSJmb250LXdlaWdodDo3MDA7ZmlsbDojM2I0MTRiIj4zLjNWPC90ZXh0Pgo8bGluZSB4MT0iNjAxIiB5MT0iNjgwIiB4Mj0iNjAxIiB5Mj0iNzUwIiBzdHJva2U9IiMyZjZmZGYiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPGNpcmNsZSBjeD0iNjAxIiBjeT0iNjgwIiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzJmNmZkZiIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9IjYwMSIgY3k9Ijc1MCIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiMyZjZmZGYiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI2MDEiIHk9IjY2NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im0gcGluIiBzdHlsZT0iZm9udC1zaXplOjEzcHgiPlBBMTM8L3RleHQ+Cjx0ZXh0IHg9IjYwMSIgeT0iNzcyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0ibSBmbiIgc3R5bGU9ImZvbnQtd2VpZ2h0OjcwMDtmaWxsOiMzYjQxNGIiPlNXRElPPC90ZXh0Pgo8bGluZSB4MT0iNjc3IiB5MT0iNjgwIiB4Mj0iNjc3IiB5Mj0iNzUwIiBzdHJva2U9IiNjOTk0MDAiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPGNpcmNsZSBjeD0iNjc3IiBjeT0iNjgwIiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iI2M5OTQwMCIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9IjY3NyIgY3k9Ijc1MCIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiNjOTk0MDAiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI2NzciIHk9IjY2NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im0gcGluIiBzdHlsZT0iZm9udC1zaXplOjEzcHgiPlBBMTQ8L3RleHQ+Cjx0ZXh0IHg9IjY3NyIgeT0iNzcyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0ibSBmbiIgc3R5bGU9ImZvbnQtd2VpZ2h0OjcwMDtmaWxsOiMzYjQxNGIiPlNXQ0xLPC90ZXh0Pgo8bGluZSB4MT0iNzUzIiB5MT0iNjgwIiB4Mj0iNzUzIiB5Mj0iNzUwIiBzdHJva2U9IiMyYjJmMzYiIHN0cm9rZS13aWR0aD0iMy41IiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPGNpcmNsZSBjeD0iNzUzIiBjeT0iNjgwIiByPSI1LjUiIGZpbGw9IiNmZmYiIHN0cm9rZT0iIzJiMmYzNiIgc3Ryb2tlLXdpZHRoPSIzIi8+CjxjaXJjbGUgY3g9Ijc1MyIgY3k9Ijc1MCIgcj0iNS41IiBmaWxsPSIjZmZmIiBzdHJva2U9IiMyYjJmMzYiIHN0cm9rZS13aWR0aD0iMyIvPgo8dGV4dCB4PSI3NTMiIHk9IjY2NiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgY2xhc3M9Im0gcGluIiBzdHlsZT0iZm9udC1zaXplOjEzcHgiPkc8L3RleHQ+Cjx0ZXh0IHg9Ijc1MyIgeT0iNzcyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBjbGFzcz0ibSBmbiIgc3R5bGU9ImZvbnQtd2VpZ2h0OjcwMDtmaWxsOiMzYjQxNGIiPkdORDwvdGV4dD4KPHRleHQgeD0iNDAiIHk9IjY5MCIgY2xhc3M9Im50Ij5ESVNQTEFZIE5PVEVTPC90ZXh0Pgo8dGV4dCB4PSI0MCIgeT0iNzE2IiBjbGFzcz0ibm90ZSI+4oCiIFNQSTEgbWFzdGVyLCBtb2RlIDAsIDQgTUh6ICg4IE1IeiBQQ0xLMiDDtyAyKSwgTVNCIGZpcnN0LjwvdGV4dD4KPHRleHQgeD0iNDAiIHk9IjczOCIgY2xhc3M9Im5vdGUiPuKAoiBDUywgRC9DIGFuZCBSRVNFVCBhcmUgcGxhaW4gR1BJTyBwdXNoLXB1bGwgb3V0cHV0cy48L3RleHQ+Cjx0ZXh0IHg9IjQwIiB5PSI3NjAiIGNsYXNzPSJub3RlIj7igKIgQkFDS0xJR0hUOiBUSU0zX0NIMyBQV00gYXQgMjAga0h6LCA1MCAlIGJ5IGRlZmF1bHQuPC90ZXh0Pgo8dGV4dCB4PSI0MCIgeT0iNzgyIiBjbGFzcz0ibm90ZSI+4oCiIFNETyAoTUlTTykgaXMgb3B0aW9uYWw6IHVzZWQgb25seSB0byByZWFkIHRoZSBwYW5lbCBJRCAoODUgODUgNTIpLjwvdGV4dD4KPHRleHQgeD0iNDAiIHk9IjgwNCIgY2xhc3M9Im5vdGUiPuKAoiBMRUQ6IG1vc3QgbW9kdWxlcyBzd2l0Y2ggdGhlIGJhY2tsaWdodCB3aXRoIGEgdHJhbnNpc3Rvci4gSWYgeW91cnM8L3RleHQ+Cjx0ZXh0IHg9IjUyIiB5PSI4MjYiIGNsYXNzPSJub3RlIj5oYXMgbm9uZSwgY29ubmVjdCBMRUQgdG8gMy4zIFYgaW5zdGVhZCBvZiBQQjAgKG5vIGRpbW1pbmcpLjwvdGV4dD4KPHRleHQgeD0iODgwIiB5PSI2OTAiIGNsYXNzPSJudCI+UE9XRVI8L3RleHQ+Cjx0ZXh0IHg9Ijg4MCIgeT0iNzE2IiBjbGFzcz0ibm90ZSI+4oCiIFZDQyBvZiBib3RoIG1vZHVsZXMgdG8gdGhlIEJsdWUgUGlsbCAzLjMgViBwaW4uPC90ZXh0Pgo8dGV4dCB4PSI4ODAiIHk9IjczOCIgY2xhc3M9Im5vdGUiPuKAoiBSb3VnaGx5IDcw4oCTMTEwIG1BIGF0IGZ1bGwgYmFja2xpZ2h0OyB0aGUgZGVmYXVsdDwvdGV4dD4KPHRleHQgeD0iODkyIiB5PSI3NjAiIGNsYXNzPSJub3RlIj41MCAlIFBXTSBicmlnaHRuZXNzIGhhbHZlcyB0aGUgYmFja2xpZ2h0IHNoYXJlLjwvdGV4dD4KPHRleHQgeD0iODgwIiB5PSI3ODIiIGNsYXNzPSJub3RlIj7igKIgQSBjbG9uZSBTVC1MaW5rJ3MgMy4zIFYgcGluIGNhbiB1c3VhbGx5IHN1cHBseTwvdGV4dD4KPHRleHQgeD0iODkyIiB5PSI4MDQiIGNsYXNzPSJub3RlIj5pdDsgaWYgMy4zIFYgc2FncywgdXNlIFVTQiBwb3dlci48L3RleHQ+Cjx0ZXh0IHg9Ijg4MCIgeT0iODI2IiBjbGFzcz0ibm90ZSI+4oCiIEFsbCBncm91bmRzIGFyZSBjb21tb24uPC90ZXh0Pgo8L3N2Zz4K" width="1280" height="860" style="width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff" alt="Wiring schematic: GY-521 on I2C1 (PB6, PB7, PB10 to PB13), ST7789V TFT on SPI1 (PA2 to PA7, PB0), ST-Link on PA13 and PA14">
+    <figcaption>All three boards and the debugger. Colours only help to follow each wire.</figcaption>
+  </figure>
+  <figure class="card-figure" style="max-width:260px">
+    <img src="data:image/png;base64,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" width="480" height="640" style="image-rendering:pixelated" alt="TFT dashboard: accelerometer and gyroscope X, Y, Z values, temperature, pitch and roll, and a sweeping accelerometer chart">
+    <figcaption>The TFT dashboard, rendered on a PC from the same <code>ui.c</code> by <code>tools/lcd_preview</code>.</figcaption>
+  </figure>
+  <div class="callout info"><span class="t">Why only changed characters are redrawn</span>
+  At 12 MHz SPI one full screen (240 × 320 × 2 bytes) still takes about 0.1 s to send.
+  <code>ui.c</code> draws the layout once and then, on each pass of the main loop, redraws at most two characters
+  that changed, or one column of the chart. That is at most about 0.5 ms of SPI traffic per pass, so the 100 Hz
+  sensor reads keep their timing.
+  </div>
+
+  <h3>Native USB port: power, live data and flashing</h3>
+  <p>The Blue Pill's micro-USB connector is wired to the STM32's USB full-speed device peripheral. The firmware uses it for three jobs,
+  so after one first install with the ST-Link the board only needs a USB cable.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Job</th><th>How</th><th>Code</th></tr>
+    <tr><td>Power</td><td>VBUS 5 V → on-board regulator → 3.3 V for the MCU, sensor and display</td><td>—</td></tr>
+    <tr><td>Live data</td><td>USB serial (CDC-ACM), USB ID <code>1209:0001</code>: one frame per sample, <code>g_telemetry</code> + CRC-16.
+      Read it with <code>mpu6050_monitor.py --usb</code>.</td><td><code>usb.c</code>, <code>usb_cdc.c</code>, <code>main.c</code></td></tr>
+    <tr><td>Flashing</td><td>Our DFU bootloader in the first 8 KB, USB ID <code>1209:0002</code>, written with <code>dfu-util</code>
+      by <code>./flash-usb.sh</code>.</td><td><code>bootloader/dfu_bootloader.c</code></td></tr>
+  </table></div>
+  <div class="table-wrap"><table>
+    <tr><th>Pin</th><th>Connected to</th><th>STM32 mode</th></tr>
+    <tr><td>PA11</td><td>USB D−</td><td>USB transceiver (automatic when the USB peripheral is enabled)</td></tr>
+    <tr><td>PA12</td><td>USB D+, pull-up R10 to 3.3 V</td><td>USB transceiver; driven low for 10 ms at start-up so the PC sees a reconnect</td></tr>
+    <tr><td>PB2</td><td>BOOT1 jumper</td><td>read by the bootloader: 1 = stay in DFU mode (recovery)</td></tr>
+  </table></div>
+  <div class="callout warn"><span class="t">Check R10 before you start</span>
+  USB requires a 1.5 kΩ pull-up on D+. Many Blue Pills have 10 kΩ or 4.7 kΩ there, which can make the PC fail to detect the board.
+  Measure between D+ (PA12) and 3.3 V with the board unpowered and replace R10 with 1.5 kΩ if needed.
+  </div>
+  <div class="callout info"><span class="t">What still needs the ST-Link</span>
+  Installing the bootloader the first time (<code>./flash.sh</code>), and real debugging: breakpoints and stepping use the core's SWD
+  debug port, which is not reachable over USB. If an application ever leaves USB silent, set BOOT1 to 1, press RESET and flash over USB again.
+  </div>
+  <div class="callout info"><span class="t">USB IDs</span>
+  <code>1209:0001</code> and <code>1209:0002</code> are pid.codes <i>test</i> IDs: fine for your own bench, not unique. For boards you give to
+  other people, request your own free product ID at pid.codes and change <code>Inc/usb_ids.h</code>.
+  </div>
 
   <div class="callout info"><span class="t">Why “open-drain” for I²C?</span>
   On an I²C bus no device ever drives a line <i>high</i>. Devices can only pull the line <i>low</i> or let it go.
@@ -394,31 +453,49 @@ svg .mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
 │   ├── timebase.h                <span class="c">millis(), delay_ms()</span>
 │   ├── i2c.h                     <span class="c">I²C bus driver API</span>
 │   ├── mpu6050.h                 <span class="c">MPU6050 register names, device struct, driver API</span>
-│   └── telemetry.h               <span class="c">layout of the RAM mailbox read by the PC</span>
+│   ├── telemetry.h               <span class="c">layout of the RAM mailbox read by the PC</span>
+│   ├── spi.h, st7789.h           <span class="c">SPI1 driver API, TFT window/pixel API</span>
+│   ├── gfx.h, font.h, ui.h       <span class="c">rectangles + text, bitmap fonts, TFT dashboard</span>
+│   ├── clock.h                   <span class="c">48 MHz clock set-up (SystemInit)</span>
+│   └── usb.h, usb_cdc.h, usb_ids.h <span class="c">USB device core, USB serial class, USB IDs + flash split</span>
 ├── <span class="d">Src/</span>
 │   ├── startup_stm32f103xx.S     <span class="c">vector table + Reset_Handler (assembly, from ST)</span>
 │   ├── main.c                    <span class="c">application: init, main loop, telemetry, commands</span>
 │   ├── timebase.c                <span class="c">SysTick 1 ms interrupt</span>
 │   ├── i2c.c                     <span class="c">I²C1 master driver (polling)</span>
 │   ├── mpu6050.c                 <span class="c">sensor driver</span>
+│   ├── spi.c, st7789.c           <span class="c">SPI1 master (polling) + ST7789V panel driver</span>
+│   ├── gfx.c, font_data.c, ui.c  <span class="c">text drawing, generated fonts, the TFT dashboard</span>
+│   ├── clock.c                   <span class="c">HSE 8 MHz × 6 = 48 MHz, VTOR</span>
+│   ├── usb.c, usb_cdc.c          <span class="c">bare-metal USB device core + CDC serial (USB_LP interrupt)</span>
+├── <span class="d">bootloader/</span>                   <span class="c">USB DFU bootloader (8 KB at 0x08000000) + its linker script</span>
 │   ├── syscall.c, sysmem.c       <span class="c">C library stubs (_sbrk, _write...), generated by ST, unused</span>
 ├── stm32f103x8_flash.ld          <span class="c">linker script: memory layout</span>
 ├── CMakeLists.txt, CMakePresets.json
 ├── <span class="d">cmake/</span>                        <span class="c">toolchain + compiler flags (managed by the STM32Cube VS Code extension)</span>
-├── flash.sh / flash.ps1          <span class="c">build + flash, Linux / Windows</span>
+├── flash.sh / flash.ps1          <span class="c">build + flash bootloader + app with the ST-Link, Linux / Windows</span>
+├── flash-usb.sh / flash-usb.ps1  <span class="c">build + flash the app over the board's own USB (dfu-util)</span>
 ├── <span class="d">tools/</span>
 │   ├── mpu6050_monitor.py        <span class="c">PC monitor: OpenOCD client, maths, terminal, web server</span>
-│   └── dashboard.html            <span class="c">live web dashboard (served by the monitor)</span>
+│   ├── dashboard.html            <span class="c">live web dashboard (served by the monitor)</span>
+│   ├── gen_font.py               <span class="c">makes font_data.c from the public-domain X11 fixed fonts</span>
+│   ├── <span class="d">lcd_preview/</span>               <span class="c">runs ui.c on the PC and saves the screen as an image</span>
+│   ├── <span class="d">usb_sim/</span>                   <span class="c">runs the USB code on the PC against a model of the peripheral</span>
+│   └── <span class="d">udev/</span>                      <span class="c">Linux rule: dfu-util without sudo, keep ModemManager away</span>
 ├── HARDWARE.md, INSTALL.md
 └── <span class="d">build/Debug/</span>                  <span class="c">output: mpu6050.elf, .bin, .map (generated)</span></pre>
 
   <h3>Who includes whom</h3>
   <div class="table-wrap"><table>
     <tr><th>File</th><th>Includes</th><th>Knows about</th></tr>
-    <tr><td><code>main.c</code></td><td>board.h, i2c.h, mpu6050.h, stm32f103_regs.h, telemetry.h, timebase.h</td><td>everything (it is the top layer)</td></tr>
+    <tr><td><code>main.c</code></td><td>board.h, i2c.h, mpu6050.h, stm32f103_regs.h, telemetry.h, timebase.h, ui.h, usb.h, usb_cdc.h, usb_ids.h</td><td>everything (it is the top layer)</td></tr>
     <tr><td><code>mpu6050.c</code></td><td>mpu6050.h, i2c.h, timebase.h</td><td>I²C API and delays only. <b>No STM32 registers</b> → portable to other MCUs.</td></tr>
     <tr><td><code>i2c.c</code></td><td>i2c.h, board.h, stm32f103_regs.h</td><td>STM32 registers and the pin numbers. Knows nothing about the MPU6050.</td></tr>
     <tr><td><code>timebase.c</code></td><td>timebase.h, board.h, stm32f103_regs.h</td><td>SysTick registers and the CPU clock.</td></tr>
+    <tr><td><code>ui.c</code></td><td>ui.h, gfx.h, font.h, st7789.h, telemetry.h</td><td>Reads <code>g_telemetry</code> only. <b>No STM32 registers</b> → also runs on a PC (<code>tools/lcd_preview</code>).</td></tr>
+    <tr><td><code>st7789.c</code></td><td>st7789.h, spi.h, board.h, stm32f103_regs.h, timebase.h</td><td>Panel commands, CS/DC/RESET/backlight pins. Exposes only window + pixel calls.</td></tr>
+    <tr><td><code>spi.c</code></td><td>spi.h, board.h, stm32f103_regs.h</td><td>SPI1 registers and its three pins. Knows nothing about the display.</td></tr>
+    <tr><td><code>usb.c</code></td><td>usb.h, board.h, stm32f103_regs.h</td><td>USB registers and packet memory, endpoint 0 and the standard requests. Class requests go to a <code>usb_class_t</code> driver: <code>usb_cdc.c</code> in the app, the DFU code in the bootloader.</td></tr>
   </table></div>
 </section>
 
@@ -529,9 +606,9 @@ g_pfnVectors:
   .word WWDG_IRQHandler   /* 0x40: first STM32 peripheral interrupt      */
   ...</code></pre>
   <div class="callout info"><span class="t">Odd addresses: the Thumb bit</span>
-  If you read the vector table with a debugger you see <code>Reset_Handler = 0x08000A51</code>, an odd number.
+  If you read the vector table with a debugger you see <code>Reset_Handler = 0x08003339</code>, an odd number.
   Cortex-M only runs the Thumb instruction set, and bit 0 of every code address must be 1 to say “Thumb”.
-  The real function starts at <code>0x08000A50</code>. The Python script removes this bit too (<code>addr &amp;= ~1</code> in <code>elf_function_at()</code>).
+  The real function starts at <code>0x08003338</code>. The Python script removes this bit too (<code>addr &amp;= ~1</code> in <code>elf_function_at()</code>).
   </div>
 
   <h3>Step 2 – <code>Reset_Handler</code> prepares RAM</h3>
@@ -583,12 +660,13 @@ void Reset_Handler(void)
 }</code></pre>
   <p>The symbols <code>_sidata</code>, <code>_sdata</code>, <code>_edata</code>, <code>_sbss</code>, <code>_ebss</code> do not exist in any C file. The <b>linker script</b> creates them (next chapter).</p>
 
-  <div class="callout warn"><span class="t">Note: <code>SystemInit</code> does not exist in this project</span>
-  At the end of the startup file there is <code>.weak SystemInit</code> but no C file defines it. For an undefined weak
-  symbol, the GNU linker turns the <code>bl SystemInit</code> call into a no-op. That is why the chip keeps running on its
-  reset clock: the internal 8 MHz HSI oscillator. If you want 72 MHz later, write your own <code>void SystemInit(void)</code>
-  that starts the HSE crystal and the PLL, and update <code>CORE_CLOCK_HZ</code> / <code>PCLK1_HZ</code> in <code>board.h</code>
-  (APB1 has a maximum of 36 MHz).
+  <div class="callout info"><span class="t"><code>SystemInit</code>: the clock is set before <code>main()</code></span>
+  <code>Src/clock.c</code> defines <code>SystemInit()</code>. It starts the Blue Pill's 8 MHz crystal (HSE), multiplies it by 6 with
+  the PLL and switches the chip to <b>48 MHz</b>, because the USB peripheral needs an exact 48 MHz clock (the internal HSI is only
+  about ±1 %). APB1 is divided by 2 (24 MHz, its maximum is 36 MHz); flash gets one wait state. It also sets <code>VTOR</code>, the
+  vector table address, because the application now starts at <code>0x08002000</code> after the USB bootloader.
+  It runs <i>before</i> <code>.data</code> and <code>.bss</code> exist, so it must not use global variables.
+  If the crystal does not start, it falls back to HSI ÷ 2 × 12 = 48 MHz: everything runs, but USB may not.
   </div>
 
   <h3>Step 3 – weak interrupt handlers</h3>
@@ -620,7 +698,7 @@ void Reset_Handler(void)
 <pre data-file="stm32f103x8_flash.ld" class="lang-ld"><code>MEMORY
 {
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 20K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 64K
+  FLASH    (rx)    : ORIGIN = 0x8002000,   LENGTH = 56K   /* after the 8 KB USB bootloader */
 }
 
 ENTRY(Reset_Handler)                       /* for the debugger / ELF header */
@@ -628,20 +706,21 @@ _estack = ORIGIN(RAM) + LENGTH(RAM);       /* 0x20005000: top of RAM = initial S
 _Min_Heap_Size = 0x200;                    /* 512 bytes  */
 _Min_Stack_Size = 0x400;                   /* 1024 bytes */</code></pre>
   <p><code>x</code> = executable, <code>r</code> = readable, <code>w</code> = writable. If your program is too big for these
-  regions, the link fails with “region FLASH overflowed”.</p>
+  regions, the link fails with “region FLASH overflowed”. The first 8 KB of flash belong to the USB DFU bootloader, a second,
+  separate program with its own linker script (<code>bootloader/bootloader.ld</code>, <code>ORIGIN = 0x8000000, LENGTH = 8K</code>).</p>
 
   <h3>2. SECTIONS – what goes where, in which order</h3>
   <div class="table-wrap"><table>
     <tr><th>Output section</th><th>Contains</th><th>Lives in</th><th>Address / size in this build</th></tr>
-    <tr><td><code>.isr_vector</code></td><td>vector table. <code>KEEP()</code> stops the linker from deleting it as “unused”.</td><td>FLASH, first</td><td><code>0x08000000</code>, 304 B</td></tr>
-    <tr><td><code>.text</code></td><td>all code (<code>*(.text*)</code>)</td><td>FLASH</td><td><code>0x08000130</code>, 6040 B</td></tr>
-    <tr><td><code>.rodata</code></td><td><code>const</code> data, string literals, e.g. the <code>ranges[]</code> table in <code>dump_registers()</code></td><td>FLASH</td><td><code>0x080018C8</code>, 12 B</td></tr>
+    <tr><td><code>.isr_vector</code></td><td>vector table. <code>KEEP()</code> stops the linker from deleting it as “unused”.</td><td>FLASH, first</td><td><code>0x08002000</code>, 304 B</td></tr>
+    <tr><td><code>.text</code></td><td>all code (<code>*(.text*)</code>)</td><td>FLASH</td><td><code>0x08002130</code>, 21396 B</td></tr>
+    <tr><td><code>.rodata</code></td><td><code>const</code> data, string literals, e.g. the <code>ranges[]</code> table in <code>dump_registers()</code></td><td>FLASH</td><td><code>0x08007344</code>, 6820 B (mostly the TFT fonts)</td></tr>
     <tr><td><code>.ARM.extab / .ARM</code></td><td>exception unwinding tables (C++)</td><td>FLASH</td><td>empty</td></tr>
     <tr><td><code>.init_array / .fini_array</code></td><td>constructor / destructor pointers used by <code>__libc_init_array</code></td><td>FLASH</td><td>12 B (from the C library)</td></tr>
-    <tr><td><code>.data</code></td><td>initialised variables</td><td><b>RAM, with a copy in FLASH</b></td><td>runs at <code>0x20000000</code>, stored at <code>0x080018E0</code>, 12 B</td></tr>
+    <tr><td><code>.data</code></td><td>initialised variables</td><td><b>RAM, with a copy in FLASH</b></td><td>runs at <code>0x20000000</code>, stored at <code>0x08008F74</code>, 324 B</td></tr>
     <tr><td><code>.tdata / .tbss</code></td><td>thread-local storage (not used)</td><td>RAM</td><td>empty</td></tr>
-    <tr><td><code>.bss</code></td><td>zero-initialised variables (<code>NOLOAD</code>: nothing stored in flash)</td><td>RAM</td><td><code>0x2000000C</code>, 852 B</td></tr>
-    <tr><td><code>._user_heap_stack</code></td><td>not real data: reserves 512 + 1024 bytes so the link <b>fails</b> if RAM is too full</td><td>RAM</td><td><code>0x20000360</code>, 1536 B</td></tr>
+    <tr><td><code>.bss</code></td><td>zero-initialised variables (<code>NOLOAD</code>: nothing stored in flash)</td><td>RAM</td><td><code>0x20000144</code>, 3436 B</td></tr>
+    <tr><td><code>._user_heap_stack</code></td><td>not real data: reserves 512 + 1024 bytes so the link <b>fails</b> if RAM is too full</td><td>RAM</td><td><code>0x20000EB0</code>, 1536 B</td></tr>
     <tr><td><code>/DISCARD/</code></td><td>removes extra sections of libc/libm/libgcc</td><td>—</td><td></td></tr>
   </table></div>
 
@@ -662,32 +741,35 @@ _Min_Stack_Size = 0x400;                   /* 1024 bytes */</code></pre>
   and the code uses the RAM address (the <b>Virtual Memory Address</b>, VMA). The startup loop copies LMA → VMA.
   <code>&gt;RAM AT&gt; FLASH</code> is the line that does this.</p>
   <ul>
-    <li><code>s_mpu</code> (7 bytes) is at <code>0x20000004</code> in RAM; its initial bytes are stored in flash at <code>0x080018E4</code>.</li>
-    <li><code>g_telemetry</code> (248 bytes) is <b>not</b> initialised, so it is in <code>.bss</code> at <code>0x200001C0</code> and is zeroed by the startup code.</li>
+    <li><code>s_mpu</code> (7 bytes) is at <code>0x2000012C</code> in RAM; its initial bytes are stored in flash at <code>0x080090A0</code>.</li>
+    <li><code>g_telemetry</code> (248 bytes) is <b>not</b> initialised, so it is in <code>.bss</code> at <code>0x20000430</code> and is zeroed by the startup code.</li>
   </ul>
 
   <figure>
   <svg viewBox="0 0 900 470" role="img" aria-label="Memory map of flash and RAM">
     <g font-size="13">
       <text x="40" y="26" font-weight="700" fill="var(--text)">FLASH 64 KB @ 0x0800 0000</text>
+      <rect x="40" y="430" width="300" height="20" fill="var(--surface)" stroke="var(--border)"/>
+      <text x="190" y="445" text-anchor="middle" fill="var(--muted)" font-size="12">USB DFU bootloader (8 KB, own image)</text>
       <rect x="40" y="40" width="300" height="410" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
-      <rect x="40" y="380" width="300" height="70" rx="0" fill="var(--c1-soft)" stroke="var(--c1)"/>
-      <text x="190" y="400" text-anchor="middle" fill="var(--text)">.isr_vector · .text · .rodata</text>
-      <text x="190" y="418" text-anchor="middle" fill="var(--muted)" font-size="12">code + constants ≈ 6.3 KB</text>
-      <rect x="40" y="360" width="300" height="20" fill="var(--c2-soft)" stroke="var(--c2)"/>
-      <text x="190" y="375" text-anchor="middle" fill="var(--text)" font-size="12">.data initial values (LMA) 12 B</text>
-      <text x="190" y="210" text-anchor="middle" fill="var(--muted)">free ≈ 57 KB</text>
+      <rect x="40" y="290" width="300" height="140" rx="0" fill="var(--c1-soft)" stroke="var(--c1)"/>
+      <text x="190" y="355" text-anchor="middle" fill="var(--text)">.isr_vector · .text · .rodata</text>
+      <text x="190" y="373" text-anchor="middle" fill="var(--muted)" font-size="12">code + constants ≈ 27.9 KB</text>
+      <rect x="40" y="270" width="300" height="20" fill="var(--c2-soft)" stroke="var(--c2)"/>
+      <text x="190" y="285" text-anchor="middle" fill="var(--text)" font-size="12">.data initial values (LMA) 324 B</text>
+      <text x="190" y="160" text-anchor="middle" fill="var(--muted)">free ≈ 27.8 KB</text>
       <text x="350" y="452" class="mono" font-size="11" fill="var(--muted)">0x08000000</text>
-      <text x="350" y="384" class="mono" font-size="11" fill="var(--muted)">0x080018E0</text>
+      <text x="350" y="434" class="mono" font-size="11" fill="var(--muted)">0x08002000</text>
+      <text x="350" y="294" class="mono" font-size="11" fill="var(--muted)">0x08008F74</text>
       <text x="350" y="46" class="mono" font-size="11" fill="var(--muted)">0x08010000</text>
 
       <text x="520" y="26" font-weight="700" fill="var(--text)">RAM 20 KB @ 0x2000 0000</text>
       <rect x="520" y="40" width="300" height="410" rx="6" fill="var(--surface-2)" stroke="var(--border)"/>
       <rect x="520" y="430" width="300" height="20" fill="var(--c2-soft)" stroke="var(--c2)"/>
-      <text x="670" y="445" text-anchor="middle" fill="var(--text)" font-size="12">.data 12 B (s_mpu …)</text>
+      <text x="670" y="445" text-anchor="middle" fill="var(--text)" font-size="12">.data 324 B (s_mpu …)</text>
       <rect x="520" y="370" width="300" height="60" fill="var(--c3-soft)" stroke="var(--c3)"/>
-      <text x="670" y="392" text-anchor="middle" fill="var(--text)">.bss 852 B (zeroed)</text>
-      <text x="670" y="410" text-anchor="middle" fill="var(--muted)" font-size="12">g_telemetry @ 0x200001C0, s_regs, s_ticks_ms…</text>
+      <text x="670" y="392" text-anchor="middle" fill="var(--text)">.bss 3436 B (zeroed)</text>
+      <text x="670" y="410" text-anchor="middle" fill="var(--muted)" font-size="12">g_telemetry @ 0x20000430, s_regs, USB buffers…</text>
       <rect x="520" y="320" width="300" height="50" fill="var(--surface)" stroke="var(--border)" stroke-dasharray="4 3"/>
       <text x="670" y="342" text-anchor="middle" fill="var(--muted)" font-size="12">heap (grows up ↑) – unused here</text>
       <text x="670" y="358" text-anchor="middle" fill="var(--muted)" font-size="11">_sbrk() / malloc() start at symbol “end”</text>
@@ -696,14 +778,14 @@ _Min_Stack_Size = 0x400;                   /* 1024 bytes */</code></pre>
       <text x="670" y="70" text-anchor="middle" fill="var(--text)">stack (grows down ↓)</text>
       <text x="670" y="90" text-anchor="middle" fill="var(--muted)" font-size="12">local variables, return addresses</text>
       <text x="830" y="452" class="mono" font-size="11" fill="var(--muted)">0x20000000</text>
-      <text x="830" y="374" class="mono" font-size="11" fill="var(--muted)">0x2000000C</text>
-      <text x="830" y="324" class="mono" font-size="11" fill="var(--muted)">0x20000360</text>
+      <text x="830" y="374" class="mono" font-size="11" fill="var(--muted)">0x20000144</text>
+      <text x="830" y="324" class="mono" font-size="11" fill="var(--muted)">0x20000EB0</text>
       <text x="830" y="46" class="mono" font-size="11" fill="var(--muted)">0x20005000</text>
       <text x="830" y="60" class="mono" font-size="11" fill="var(--c5)">= _estack</text>
     </g>
-    <path d="M340,370 C420,370 440,440 518,440" fill="none" stroke="var(--c2)" stroke-width="1.8" marker-end="url(#ar)"/>
-    <text x="430" y="392" text-anchor="middle" font-size="12" fill="var(--c2)">copied by</text>
-    <text x="430" y="407" text-anchor="middle" font-size="12" fill="var(--c2)">Reset_Handler</text>
+    <path d="M340,280 C420,280 440,440 518,440" fill="none" stroke="var(--c2)" stroke-width="1.8" marker-end="url(#ar)"/>
+    <text x="430" y="322" text-anchor="middle" font-size="12" fill="var(--c2)">copied by</text>
+    <text x="430" y="337" text-anchor="middle" font-size="12" fill="var(--c2)">Reset_Handler</text>
   </svg>
   <figcaption>Real addresses from <code>build/Debug/mpu6050.elf</code>. Addresses grow upward in the picture. Note that 400 bytes of <code>.bss</code> belong to the C library's <code>atexit</code> table (<code>__atexit0</code>), which this firmware never uses.</figcaption>
   </figure>
@@ -712,10 +794,10 @@ _Min_Stack_Size = 0x400;                   /* 1024 bytes */</code></pre>
   <div class="table-wrap"><table>
     <tr><th>Symbol</th><th>Value</th><th>Used by</th></tr>
     <tr><td><code>_estack</code></td><td>0x20005000</td><td>vector table word 0, Reset_Handler</td></tr>
-    <tr><td><code>_sidata</code></td><td>0x080018E0</td><td>Reset_Handler (source of the copy)</td></tr>
-    <tr><td><code>_sdata</code> / <code>_edata</code></td><td>0x20000000 / 0x2000000C</td><td>Reset_Handler (copy destination)</td></tr>
-    <tr><td><code>_sbss</code> / <code>_ebss</code></td><td>0x2000000C / 0x20000360</td><td>Reset_Handler (zero fill)</td></tr>
-    <tr><td><code>end</code></td><td>0x20000360</td><td><code>_sbrk()</code> in <code>sysmem.c</code> (heap start for <code>malloc</code>)</td></tr>
+    <tr><td><code>_sidata</code></td><td>0x08008F74</td><td>Reset_Handler (source of the copy)</td></tr>
+    <tr><td><code>_sdata</code> / <code>_edata</code></td><td>0x20000000 / 0x20000144</td><td>Reset_Handler (copy destination)</td></tr>
+    <tr><td><code>_sbss</code> / <code>_ebss</code></td><td>0x20000144 / 0x20000EB0</td><td>Reset_Handler (zero fill)</td></tr>
+    <tr><td><code>end</code></td><td>0x20000EB0</td><td><code>_sbrk()</code> in <code>sysmem.c</code> (heap start for <code>malloc</code>)</td></tr>
   </table></div>
 
   <h3>5. Useful build outputs</h3>
@@ -751,14 +833,19 @@ _Min_Stack_Size = 0x400;                   /* 1024 bytes */</code></pre>
 
   <h3>From source to chip</h3>
 <pre class="lang-sh"><code>cmake --preset Debug          # configure: generates build/Debug/build.ninja
-cmake --build --preset Debug  # compile .c/.S -> .o, link -> mpu6050.elf
-arm-none-eabi-objcopy -O binary build/Debug/mpu6050.elf build/Debug/mpu6050.bin   # raw flash image
-st-flash --reset write build/Debug/mpu6050.bin 0x08000000                       # write to flash</code></pre>
+cmake --build --preset Debug  # compile + link two programs: mpu6050.elf and bootloader.elf
+arm-none-eabi-objcopy -O binary build/Debug/mpu6050.elf build/Debug/mpu6050.bin       # raw flash images
+arm-none-eabi-objcopy -O binary build/Debug/bootloader.elf build/Debug/bootloader.bin
+st-flash write build/Debug/bootloader.bin 0x08000000                                # USB bootloader
+st-flash --reset write build/Debug/mpu6050.bin 0x08002000                           # application</code></pre>
   <p><code>flash.sh</code> does exactly these steps (and falls back to <code>STM32_Programmer_CLI</code> or OpenOCD if
-  <code>st-flash</code> is missing). It refuses to flash while <code>openocd</code> is running, because only one program can use the ST-Link.</p>
+  <code>st-flash</code> is missing). It refuses to flash while <code>openocd</code> is running, because only one program can use the ST-Link.
+  After that, the application can be updated over the board's own USB port: <code>./flash-usb.sh</code> builds it, asks the running
+  application to restart into the bootloader and writes it with <code>dfu-util</code> (see chapter 2, “Native USB port”).</p>
   <div class="callout info"><span class="t">.elf vs .bin</span>
   The <b>.elf</b> contains the machine code <i>plus</i> addresses, symbols and debug info (good for debuggers and for the Python tool).
-  The <b>.bin</b> is just the raw bytes to put at <code>0x08000000</code>; that is why <code>st-flash</code> needs the address argument.
+  The <b>.bin</b> is just the raw bytes; that is why <code>st-flash</code> needs the address argument (<code>0x08000000</code> for the
+  bootloader, <code>0x08002000</code> for the application).
   </div>
 </section>
 
@@ -904,7 +991,7 @@ gpio_config(GPIOB_BASE, MPU_INT_PIN, GPIO_MODE_IN_PULL);</code></pre>
   <div class="kicker">Chapter 10</div>
   <h2>SysTick time base (<code>timebase.c</code>)</h2>
   <p>SysTick is a 24-bit down-counter inside every Cortex-M core (PM0056 section 4.5). It counts down from the reload value
-  to 0, then reloads and raises an interrupt. With an 8 MHz clock and a reload of 7999, it fires every 8000 cycles = <b>1 ms</b>.</p>
+  to 0, then reloads and raises an interrupt. With a 48 MHz clock and a reload of 47999, it fires every 48000 cycles = <b>1 ms</b>.</p>
 <pre data-file="Src/timebase.c" class="lang-c"><code>static volatile uint32_t s_ticks_ms;     /* volatile: changed inside an interrupt */
 
 void SysTick_Handler(void)               /* name must match the vector table */
@@ -914,7 +1001,7 @@ void SysTick_Handler(void)               /* name must match the vector table */
 
 void timebase_init(void)
 {
-    SYST_RVR = (CORE_CLOCK_HZ / 1000UL) - 1UL;   /* 7999: counts 7999..0 = 8000 ticks */
+    SYST_RVR = (CORE_CLOCK_HZ / 1000UL) - 1UL;   /* 47999: counts 47999..0 = 48000 ticks */
     SYST_CVR = 0U;                               /* any write clears the current value */
     SYST_CSR = SYST_CSR_CLKSOURCE                /* bit 2: use the CPU clock            */
              | SYST_CSR_TICKINT                  /* bit 1: interrupt when it reaches 0  */
@@ -1024,9 +1111,9 @@ void delay_ms(uint32_t ms)
   <div class="table-wrap"><table>
     <tr><th>Register</th><th>Offset</th><th>Bits used</th><th>Value here and why</th></tr>
     <tr><td><code>CR1</code></td><td>0x00</td><td>PE (0) enable · START (8) · STOP (9) · ACK (10) · POS (11) · SWRST (15)</td><td>controlled during each transfer</td></tr>
-    <tr><td><code>CR2</code></td><td>0x04</td><td>FREQ[5:0] = APB1 clock in MHz</td><td><code>8</code> – the peripheral needs it to generate correct timings</td></tr>
-    <tr><td><code>CCR</code></td><td>0x1C</td><td>CCR[11:0], F/S (15) = 0 standard mode</td><td><code>8 MHz / (2 × 100 kHz) = 40</code>. SCL high = 40 × 125 ns = 5 µs, low = 5 µs → 10 µs period = 100 kHz</td></tr>
-    <tr><td><code>TRISE</code></td><td>0x20</td><td>max rise time in APB1 cycles + 1</td><td><code>1000 ns / 125 ns + 1 = 9</code> (I²C standard mode allows 1000 ns)</td></tr>
+    <tr><td><code>CR2</code></td><td>0x04</td><td>FREQ[5:0] = APB1 clock in MHz</td><td><code>24</code> – the peripheral needs it to generate correct timings</td></tr>
+    <tr><td><code>CCR</code></td><td>0x1C</td><td>CCR[11:0], F/S (15) = 0 standard mode</td><td><code>24 MHz / (2 × 100 kHz) = 120</code>. SCL high = 120 × 41.7 ns = 5 µs, low = 5 µs → 10 µs period = 100 kHz</td></tr>
+    <tr><td><code>TRISE</code></td><td>0x20</td><td>max rise time in APB1 cycles + 1</td><td><code>1000 ns / 41.7 ns + 1 = 25</code> (I²C standard mode allows 1000 ns)</td></tr>
     <tr><td><code>DR</code></td><td>0x10</td><td>data register: write = send byte, read = received byte</td><td></td></tr>
   </table></div>
 
@@ -1081,9 +1168,9 @@ uint32_t i2c_error_count(void);                                              /* 
     I2C1_CR1 = I2C_CR1_SWRST;
     I2C1_CR1 = 0U;
 
-    I2C1_CR2   = PCLK1_HZ / 1000000UL;                         /* 6. timing: 8 MHz           */
-    I2C1_CCR   = PCLK1_HZ / (2UL * I2C_SPEED_HZ);              /*    40 -> 100 kHz           */
-    I2C1_TRISE = (PCLK1_HZ / 1000000UL) + 1UL;                 /*    9                       */
+    I2C1_CR2   = PCLK1_HZ / 1000000UL;                         /* 6. timing: 24 MHz          */
+    I2C1_CCR   = PCLK1_HZ / (2UL * I2C_SPEED_HZ);              /*    120 -> 100 kHz          */
+    I2C1_TRISE = (PCLK1_HZ / 1000000UL) + 1UL;                 /*    25                      */
     I2C1_CR1   = I2C_CR1_PE;                                   /* 7. enable                  */
 }</code></pre>
   <p>Order matters: CR2/CCR/TRISE must be written while PE = 0 (the peripheral is disabled).</p>
@@ -1653,7 +1740,7 @@ static void tm_end(void)
   </table></div>
   <div class="callout tip"><span class="t">Try it by hand</span>
   With OpenOCD running (<code>openocd -f interface/stlink.cfg -f target/stm32f1x.cfg</code>) connect with <code>telnet localhost 4444</code> and type
-  <code>mdw 0x200001c0 4</code>: you see the magic, version/size, and seq_head. This is exactly what the Python tool does, just automated.
+  <code>mdw 0x20000430 4</code>: you see the magic, version/size, and seq_head. This is exactly what the Python tool does, just automated.
   (The address can change when you rebuild – check the <code>.map</code> file.)
   </div>
 </section>
@@ -1735,8 +1822,8 @@ for sh in sections:
     resp, _, self.buf = self.buf.partition(b"\x1a")
     return resp.decode(errors="replace").strip()
 
-# read 62 words:  "read_memory 0x200001c0 32 62"   (OpenOCD &gt;= 0.12, else "mdw")
-# write a word :  "mww 0x200002ac 0x00000201"   (offset 236: cmd_id = 1, cmd_arg = 2)</code></pre>
+# read 62 words:  "read_memory 0x20000430 32 62"   (OpenOCD &gt;= 0.12, else "mdw")
+# write a word :  "mww 0x2000051c 0x00000201"   (offset 236: cmd_id = 1, cmd_arg = 2)</code></pre>
   <p><code>launch_openocd()</code> starts OpenOCD with <code>interface/stlink.cfg</code> + <code>target/stm32f1x.cfg</code> if it is not running, with
   <code>set CPUTAPID 0</code> so clone chips (CKS32, GD32…) are accepted.</p>
 
@@ -1852,7 +1939,7 @@ for (;;) {
   <p>Goal: the STM32 can see the sensor. Check: <code>i2c_probe(0x68)</code> returns 0; with the sensor unplugged it returns −1 (and does <b>not</b> hang).</p>
   <ol>
     <li>Clocks (GPIOB, AFIO, I2C1), PB6/PB7 as AF open-drain.</li>
-    <li>CR2 = 8, CCR = 40, TRISE = 9, then PE = 1.</li>
+    <li>CR2 = 24, CCR = 120, TRISE = 25 (APB1 = 24 MHz), then PE = 1.</li>
     <li><code>probe</code>: START → wait SB → DR = 0xD0 → wait ADDR <i>or</i> AF → STOP → clear AF.</li>
     <li>Every wait loop gets a timeout from the very beginning.</li>
   </ol>
@@ -1907,7 +1994,7 @@ float my_mpu_acc_lsb_per_g(const my_mpu_t *dev);       /* 16384, 8192, ...      
 
   <h3>Ideas after that</h3>
   <ul>
-    <li>Clock the MCU at 72 MHz (HSE + PLL in your own <code>SystemInit</code>) and I²C at 400 kHz (fast mode: <code>CCR.F/S = 1</code>, different CCR and TRISE values – see RM0008 26.6.8).</li>
+    <li>Clock the MCU at 72 MHz instead of 48 (PLL × 9, USB prescaler ÷ 1.5, two flash wait states, APB1 ÷ 2 = 36 MHz) and I²C at 400 kHz (fast mode: <code>CCR.F/S = 1</code>, different CCR and TRISE values – see RM0008 26.6.8).</li>
     <li>Use the FIFO to read many samples at once.</li>
     <li>Run the complementary filter on the MCU (Cortex-M3 has no FPU: try fixed-point maths).</li>
     <li>Add a UART and <code>printf</code> (implement <code>_write()</code> in <code>syscall.c</code>).</li>

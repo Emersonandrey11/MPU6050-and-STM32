@@ -2,26 +2,34 @@
 """
 MPU6050 live monitor for the STM32F103 firmware in this project.
 
-How the data gets to the PC (no UART adapter needed):
+How the data gets to the PC (no UART adapter needed). Two ways:
 
+  ST-Link (default):
     MPU6050 --I2C--> STM32 RAM (g_telemetry) --SWD--> ST-Link --USB--> OpenOCD
             --TCL socket :6666--> this script --> terminal and/or web dashboard
+    The firmware keeps the latest sample in a global struct. OpenOCD reads that
+    RAM through the debug port while the MCU keeps running.
 
-The firmware keeps the latest sample in a global struct. OpenOCD reads that
-RAM through the debug port while the MCU keeps running.
+  Native USB (--usb): the Blue Pill's own micro-USB port is a USB serial
+  device (1209:0001, /dev/ttyACMx or COMx). The firmware sends the same struct
+  after every sample as [248 bytes][CRC-16/XMODEM]; commands go back as
+  8-byte frames 'M' 'C' seq(u32) id arg.
 
 Usage:
-    python3 tools/mpu6050_monitor.py             # live view in the terminal
+    python3 tools/mpu6050_monitor.py             # live view in the terminal (ST-Link)
+    python3 tools/mpu6050_monitor.py --usb --web # native USB + real-time web dashboard
     python3 tools/mpu6050_monitor.py --web       # + real-time web dashboard
     python3 tools/mpu6050_monitor.py --csv       # stream CSV lines
     python3 tools/mpu6050_monitor.py --demo --web  # simulated sensor, no hardware
 
-Only the Python standard library is used. OpenOCD must be installed
-(sudo apt install openocd); the script starts it if it is not running.
+Only the Python standard library is used. For the ST-Link path OpenOCD must be
+installed (sudo apt install openocd); the script starts it if it is not running.
 """
 
 import argparse
+import binascii
 import collections
+import glob
 import http.server
 import json
 import math
@@ -78,6 +86,8 @@ CMD_IDS = {
     "ad0": 7,
 }
 
+USB_VID, USB_PID_APP = 0x1209, 0x0001   # Inc/usb_ids.h (pid.codes test PID)
+USB_FRAME_LEN = TELEMETRY_SIZE + 2       # struct + CRC-16/XMODEM
 RAM_START = 0x20000000
 RAM_SIZE = 20 * 1024
 
@@ -503,6 +513,154 @@ class SwdDevice:
                 self.proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
+
+
+def find_usb_port():
+    """Serial port of the board's native USB (1209:0001), or None."""
+    for tty in sorted(glob.glob("/sys/class/tty/ttyACM*")):          # Linux
+        usb_dev = os.path.realpath(os.path.join(tty, "device", ".."))
+        try:
+            with open(os.path.join(usb_dev, "idVendor")) as f:
+                vid = int(f.read(), 16)
+            with open(os.path.join(usb_dev, "idProduct")) as f:
+                pid = int(f.read(), 16)
+        except (OSError, ValueError):
+            continue
+        if (vid, pid) == (USB_VID, USB_PID_APP):
+            return "/dev/" + os.path.basename(tty)
+    ports = sorted(glob.glob("/dev/cu.usbmodem*"))                      # macOS
+    return ports[0] if ports else None
+
+
+class SerialPort:
+    """Minimal serial port with the standard library only. On USB serial the
+    baud rate is meaningless, so the port is just put in raw mode."""
+
+    def __init__(self, path):
+        self.fd = None
+        self.f = None
+        if os.name == "nt":
+            self.f = open(r"\\.\%s" % path, "r+b", buffering=0)        # e.g. COM5
+        else:
+            import termios
+            self.fd = os.open(path, os.O_RDWR | os.O_NOCTTY)
+            # Raw mode and 115200 in ONE tcsetattr(): tty.setraw() would first
+            # re-send the port's previous speed, and if that is 1200 (left by
+            # flash-usb.sh) the firmware takes it as "restart into the bootloader".
+            attrs = termios.tcgetattr(self.fd)
+            attrs[0] = 0                                    # iflag: no input processing
+            attrs[1] = 0                                    # oflag: no output processing
+            attrs[2] = (attrs[2] & ~(termios.CSIZE | termios.PARENB)) | termios.CS8 | termios.CREAD | termios.CLOCAL
+            attrs[3] = 0                                    # lflag: no echo, no line editing
+            attrs[4] = attrs[5] = termios.B115200
+            attrs[6][termios.VMIN] = 0                      # read() returns after 0.1 s
+            attrs[6][termios.VTIME] = 1                     # even without data
+            termios.tcsetattr(self.fd, termios.TCSANOW, attrs)
+
+    def read(self, n):
+        return self.f.read(n) if self.f else os.read(self.fd, n)
+
+    def write(self, data):
+        if self.f:
+            self.f.write(data)
+        else:
+            os.write(self.fd, data)
+
+    def close(self):
+        if self.f:
+            self.f.close()
+        elif self.fd is not None:
+            os.close(self.fd)
+        self.f = self.fd = None
+
+
+class UsbDevice:
+    """Telemetry frames from the firmware over the native USB port."""
+
+    def __init__(self, args):
+        self.port_arg = args.usb
+        self.path = None
+        self.port = None
+        self.thread = None
+        self.stop = threading.Event()
+        self.lock = threading.Lock()
+        self.latest = None
+        self.error = None
+        self.frames = 0
+        self.bad_crc = 0
+
+    @property
+    def name(self):
+        return "native USB (%s)" % (self.path or "searching")
+
+    def connect(self):
+        self.close()
+        self.path = self.port_arg if self.port_arg != "auto" else find_usb_port()
+        if not self.path:
+            raise OSError("no MPU6050 USB serial port found (USB ID %04x:%04x). Is the board plugged into its "
+                          "micro-USB port and the USB firmware flashed? On Windows pass the port: --usb COM5"
+                          % (USB_VID, USB_PID_APP))
+        self.port = SerialPort(self.path)
+        self.stop.clear()
+        self.latest = self.error = None
+        self.thread = threading.Thread(target=self._reader, daemon=True)
+        self.thread.start()
+        deadline = time.time() + 2.0
+        while time.time() < deadline and self.latest is None and self.error is None:
+            time.sleep(0.02)
+        if self.latest is None:
+            raise OSError("%s is open but no telemetry frames arrive (%s)" % (self.path, self.error or "timeout"))
+
+    def _reader(self):
+        sync = struct.pack("<I", TELEMETRY_MAGIC)
+        buf = bytearray()
+        while not self.stop.is_set():
+            try:
+                chunk = self.port.read(512)
+            except (OSError, AttributeError, ValueError, TypeError) as e:
+                self.error = e
+                return
+            if not chunk:
+                continue
+            buf += chunk
+            while True:
+                i = buf.find(sync)
+                if i < 0:
+                    del buf[:-3]
+                    break
+                del buf[:i]
+                if len(buf) < USB_FRAME_LEN:
+                    break
+                body = bytes(buf[:TELEMETRY_SIZE])
+                crc = struct.unpack_from("<H", buf, TELEMETRY_SIZE)[0]
+                if binascii.crc_hqx(body, 0) == crc:
+                    t = Telemetry(*struct.unpack(TELEMETRY_FORMAT, body))
+                    with self.lock:
+                        self.latest = t
+                        self.frames += 1
+                    del buf[:USB_FRAME_LEN]
+                else:
+                    self.bad_crc += 1           # the magic bytes appeared inside data: resync
+                    del buf[:1]
+
+    def read(self):
+        if self.error is not None:
+            raise OSError("USB serial %s: %s" % (self.path, self.error))
+        with self.lock:
+            t, self.latest = self.latest, None
+        return t
+
+    def command(self, cmd_id, arg, current_seq):
+        self.port.write(b"MC" + struct.pack("<IBB", (current_seq + 1) & 0xFFFFFFFF, cmd_id, arg & 0xFF))
+
+    def close(self):
+        self.stop.set()
+        if self.port:
+            self.port.close()
+            self.port = None
+        if self.thread:
+            self.thread.join(timeout=1)
+            self.thread = None
 
 
 class DemoDevice:
@@ -1038,12 +1196,15 @@ def main():
         except AttributeError:
             pass
 
-    ap = argparse.ArgumentParser(description="Live MPU6050 data from the STM32 through the ST-Link")
+    ap = argparse.ArgumentParser(description="Live MPU6050 data from the STM32 (ST-Link or native USB)")
     ap.add_argument("--web", action="store_true", help="serve the real-time dashboard")
     ap.add_argument("--port", type=int, default=8000, help="web dashboard port (default 8000)")
     ap.add_argument("--no-browser", action="store_true", help="do not open the browser automatically")
     ap.add_argument("--csv", action="store_true", help="print CSV lines instead of the live screen")
     ap.add_argument("--demo", action="store_true", help="simulated sensor, no hardware needed")
+    ap.add_argument("--usb", nargs="?", const="auto", default=None, metavar="PORT",
+                    help="read over the Blue Pill's own USB port (USB serial) instead of the ST-Link; "
+                         "PORT is found automatically on Linux/macOS, give it on Windows (e.g. COM5)")
     ap.add_argument("--elf", default=DEFAULT_ELF, help="firmware ELF used to find g_telemetry")
     ap.add_argument("--openocd-host", default="127.0.0.1")
     ap.add_argument("--openocd-port", type=int, default=6666)
@@ -1059,14 +1220,26 @@ def main():
     if args.probe:
         return probe(args)
 
-    device = DemoDevice(args) if args.demo else SwdDevice(args)
+    if args.demo:
+        device = DemoDevice(args)
+    elif args.usb:
+        device = UsbDevice(args)
+    else:
+        device = SwdDevice(args)
     monitor = Monitor(device, args.poll_hz)
     worker = threading.Thread(target=monitor.run, daemon=True)
     worker.start()
 
     url = None
     if args.web:
-        server = WebServer(("127.0.0.1", args.port), make_handler(monitor))
+        try:
+            server = WebServer(("127.0.0.1", args.port), make_handler(monitor))
+        except OSError as e:
+            if e.errno != 98 and getattr(e, "winerror", None) != 10048:   # address in use (Linux / Windows)
+                raise
+            sys.exit("Port %d is already used, probably by another mpu6050_monitor.py.\n"
+                     "Stop that one (Ctrl+C in its terminal) or choose another port: --port %d"
+                     % (args.port, args.port + 1))
         threading.Thread(target=server.serve_forever, daemon=True).start()
         url = "http://127.0.0.1:%d/" % args.port
         if not args.no_browser:
